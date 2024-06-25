@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from fuzzywuzzy import fuzz, process
 import plotly.express as px
+import chardet  # Pour détecter l'encodage du fichier
 
 st.set_page_config(
     page_title="Analyseur RASFF",
@@ -37,7 +38,7 @@ def nettoyer_donnees(df):
             "Salmonella spp.",
             "Salmonella Enteritidis",
             # ... ajouter d'autres dangers ici
-        ]
+        }
         best_match = process.extractOne(nom_danger, dangers_standardises, scorer=fuzz.token_set_ratio)
         if best_match[1] >= 80:
             return best_match[0]
@@ -57,8 +58,14 @@ def nettoyer_donnees(df):
     df = df.fillna("")  # Remplace les valeurs manquantes par des chaînes vides
 
     # 5. Gestion des caractères spéciaux dans la colonne "subject"
-    # Utiliser l'encodage 'unicode_escape' pour gérer les caractères spéciaux
-    df["subject"] = df["subject"].apply(lambda x: x.encode('unicode_escape').decode('ascii'))
+    # Utiliser un détecteur d'encodage pour identifier l'encodage du fichier
+    encodage = chardet.detect(uploaded_file.read())['encoding']
+    
+    # Convertir la colonne "subject" en Unicode en utilisant l'encodage détecté
+    df["subject"] = df["subject"].apply(lambda x: x.encode(encodage).decode('unicode_escape'))
+
+    # Remplacer les caractères non-ASCII par des espaces
+    df["subject"] = df["subject"].apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
 
     return df
 
@@ -106,7 +113,11 @@ def page_analyse():
 
     if uploaded_file is not None:
         try:
-            df = pd.read_csv(uploaded_file, encoding='latin-1')  # Définir l'encodage latin-1 pour gérer les caractères spéciaux
+            # Détecter l'encodage du fichier
+            encodage = chardet.detect(uploaded_file.read())['encoding']
+            uploaded_file.seek(0)  # Rembobiner le fichier
+
+            df = pd.read_csv(uploaded_file, encoding=encodage)
             df = nettoyer_donnees(df)
 
             # Options d'analyse et de tri
