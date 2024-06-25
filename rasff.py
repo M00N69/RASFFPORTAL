@@ -39,7 +39,7 @@ def nettoyer_donnees(df):
             "Salmonella spp.",
             "Salmonella Enteritidis",
             # ... ajouter d'autres dangers ici
-        }
+        ]
         best_match = process.extractOne(nom_danger, dangers_standardises, scorer=fuzz.token_set_ratio)
         if best_match[1] >= 80:
             return best_match[0]
@@ -76,7 +76,6 @@ def nettoyer_donnees(df):
     df = pd.read_csv(fichier_corrige, encoding=encodage, quotechar='"')
 
     return df
-
 
 def page_accueil():
     """Affiche la page d'accueil."""
