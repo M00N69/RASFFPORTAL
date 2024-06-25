@@ -57,7 +57,8 @@ def nettoyer_donnees(df):
     df = df.fillna("")  # Remplace les valeurs manquantes par des chaînes vides
 
     # 5. Gestion des caractères spéciaux dans la colonne "subject"
-    df["subject"] = df["subject"].apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))  # Supprimer les caractères non-ASCII
+    # Utiliser l'encodage 'unicode_escape' pour gérer les caractères spéciaux
+    df["subject"] = df["subject"].apply(lambda x: x.encode('unicode_escape').decode('ascii'))
 
     return df
 
