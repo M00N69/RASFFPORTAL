@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 from fuzzywuzzy import fuzz, process
 import plotly.express as px
-import chardet  # Pour détecter l'encodage du fichier
+import chardet  # Pour détecter l'encodage
+from io import StringIO  # Pour manipuler le contenu du fichier
 
 st.set_page_config(
     page_title="Analyseur RASFF",
@@ -38,7 +39,7 @@ def nettoyer_donnees(df):
             "Salmonella spp.",
             "Salmonella Enteritidis",
             # ... ajouter d'autres dangers ici
-        ]
+        }
         best_match = process.extractOne(nom_danger, dangers_standardises, scorer=fuzz.token_set_ratio)
         if best_match[1] >= 80:
             return best_match[0]
@@ -60,14 +61,22 @@ def nettoyer_donnees(df):
     # 5. Gestion des caractères spéciaux dans la colonne "subject"
     # Utiliser un détecteur d'encodage pour identifier l'encodage du fichier
     encodage = chardet.detect(uploaded_file.read())['encoding']
-    
-    # Convertir la colonne "subject" en Unicode en utilisant l'encodage détecté
-    df["subject"] = df["subject"].apply(lambda x: x.encode(encodage).decode('unicode_escape'))
+    uploaded_file.seek(0)  # Rembobiner le fichier
 
-    # Remplacer les caractères non-ASCII par des espaces
-    df["subject"] = df["subject"].apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
+    # Convertir le contenu du fichier en une chaîne de caractères avec l'encodage détecté
+    contenu_fichier = uploaded_file.read().decode(encodage)
+
+    # Diviser le contenu du fichier en lignes et remplacer les caractères non-ASCII par des espaces
+    lignes = [ligne.encode('ascii', 'ignore').decode('ascii') for ligne in contenu_fichier.splitlines()]
+
+    # Créer un nouveau StringIO pour recharger le DataFrame avec les lignes corrigées
+    fichier_corrige = StringIO('\n'.join(lignes))
+
+    # Recharger le DataFrame avec les lignes corrigées
+    df = pd.read_csv(fichier_corrige, encoding=encodage, quotechar='"')
 
     return df
+
 
 def page_accueil():
     """Affiche la page d'accueil."""
