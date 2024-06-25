@@ -28,7 +28,7 @@ def nettoyer_donnees(df):
     df["notifying_country"] = df["notifying_country"].apply(normaliser_pays)
     df["origin"] = df["origin"].apply(normaliser_pays)
 
-   # 2. Correction des noms de dangers (fuzzy matching)
+    # 2. Correction des noms de dangers (fuzzy matching)
     def corriger_dangers(nom_danger):
         """Corrige les erreurs de frappe dans le nom d'un danger."""
         dangers_standardises = [
@@ -45,7 +45,7 @@ def nettoyer_donnees(df):
         else:
             return nom_danger
 
-    df["hazards"] = df["hazards"].apply(lambda x: corriger_dangers(x))
+    df["hazards"] = df["hazards"].apply(corriger_dangers)
 
     # 3. Conversion des types de données
     for colonne in ["reference", "date"]:
@@ -117,7 +117,7 @@ def page_analyse():
             encodage = chardet.detect(uploaded_file.read())['encoding']
             uploaded_file.seek(0)  # Rembobiner le fichier
 
-            df = pd.read_csv(uploaded_file, encoding=encodage)
+            df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')  # Utiliser 'quotechar' pour gérer les guillemets
             df = nettoyer_donnees(df)
 
             # Options d'analyse et de tri
