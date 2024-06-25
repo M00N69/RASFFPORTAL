@@ -28,7 +28,7 @@ def nettoyer_donnees(df):
     df["notifying_country"] = df["notifying_country"].apply(normaliser_pays)
     df["origin"] = df["origin"].apply(normaliser_pays)
 
-    # 2. Correction des noms de dangers (fuzzy matching)
+   # 2. Correction des noms de dangers (fuzzy matching)
     def corriger_dangers(nom_danger):
         """Corrige les erreurs de frappe dans le nom d'un danger."""
         dangers_standardises = [
@@ -38,14 +38,14 @@ def nettoyer_donnees(df):
             "Salmonella spp.",
             "Salmonella Enteritidis",
             # ... ajouter d'autres dangers ici
-        }
+        ]
         best_match = process.extractOne(nom_danger, dangers_standardises, scorer=fuzz.token_set_ratio)
         if best_match[1] >= 80:
             return best_match[0]
         else:
             return nom_danger
 
-    df["hazards"] = df["hazards"].apply(corriger_dangers)
+    df["hazards"] = df["hazards"].apply(lambda x: corriger_dangers(x))
 
     # 3. Conversion des types de données
     for colonne in ["reference", "date"]:
