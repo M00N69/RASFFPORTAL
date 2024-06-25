@@ -56,6 +56,9 @@ def nettoyer_donnees(df):
     # 4. Gestion des valeurs manquantes
     df = df.fillna("")  # Remplace les valeurs manquantes par des chaînes vides
 
+    # 5. Gestion des caractères spéciaux dans la colonne "subject"
+    df["subject"] = df["subject"].apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))  # Supprimer les caractères non-ASCII
+
     return df
 
 def page_accueil():
@@ -74,7 +77,8 @@ def page_accueil():
     st.markdown(
         """
         * **Téléchargement de fichier CSV :** Importez un fichier CSV contenant des données RASFF.
-        * **Nettoyage des données :** L'outil nettoie et standardise les données pour une analyse plus précise.
+        * **Nettoyage des données :** L'outil nettoie et standardise les données pour une analyse plus précise, 
+        en gérant les caractères spéciaux de différentes langues européennes.
         * **Statistiques descriptives :** Obtenez des informations clés sur les données, telles que le nombre total de notifications, les pays les plus souvent impliqués et les dangers les plus courants.
         * **Analyse de tendances :** Identifiez les tendances émergentes dans les notifications RASFF, comme les dangers qui augmentent ou diminuent au fil du temps.
         * **Visualisations :** Visualisez les données à l'aide de graphiques et de tableaux interactifs pour une meilleure compréhension.
@@ -101,7 +105,7 @@ def page_analyse():
 
     if uploaded_file is not None:
         try:
-            df = pd.read_csv(uploaded_file)
+            df = pd.read_csv(uploaded_file, encoding='latin-1')  # Définir l'encodage latin-1 pour gérer les caractères spéciaux
             df = nettoyer_donnees(df)
 
             # Options d'analyse et de tri
