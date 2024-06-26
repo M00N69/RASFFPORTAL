@@ -3,3 +3,4 @@ pandas
 fuzzywuzzy
 plotly
 chardet
+openpyxl
