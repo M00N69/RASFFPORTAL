@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 from fuzzywuzzy import fuzz, process
 import plotly.express as px
-import chardet  # Pour détecter l'encodage
-from io import StringIO  # Pour manipuler le contenu du fichier
+import chardet
+from io import StringIO
+import openpyxl  # Import openpyxl for Excel handling
 
 st.set_page_config(
     page_title="Analyseur RASFF",
@@ -92,7 +93,7 @@ def page_accueil():
     st.markdown("## Fonctionnalités")
     st.markdown(
         """
-        * **Téléchargement de fichier CSV :** Importez un fichier CSV contenant des données RASFF.
+        * **Téléchargement de fichier CSV ou Excel :** Importez un fichier CSV ou Excel contenant des données RASFF.
         * **Nettoyage des données :** L'outil nettoie et standardise les données pour une analyse plus précise, 
         en gérant les caractères spéciaux de différentes langues européennes.
         * **Statistiques descriptives :** Obtenez des informations clés sur les données, telles que le nombre total de notifications, les pays les plus souvent impliqués et les dangers les plus courants.
@@ -106,7 +107,7 @@ def page_accueil():
     st.markdown("## Instructions")
     st.markdown(
         """
-        1. Téléchargez un fichier CSV contenant des données RASFF à partir de la page "Analyse".
+        1. Téléchargez un fichier CSV ou Excel contenant des données RASFF à partir de la page "Analyse".
         2. Sélectionnez les options d'analyse et de tri souhaitées.
         3. Visualisez les résultats et exportez les données si nécessaire.
         """
@@ -116,16 +117,24 @@ def page_analyse():
     """Affiche la page d'analyse."""
     st.title("Analyse des Données RASFF")
 
-    # Téléchargement du fichier CSV
-    uploaded_file = st.file_uploader("Téléchargez un fichier CSV RASFF", type=["csv"])
+    # Téléchargement du fichier CSV ou Excel
+    uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel RASFF", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
         try:
-            # Détecter l'encodage du fichier
-            encodage = chardet.detect(uploaded_file.read())['encoding']
-            uploaded_file.seek(0)  # Rembobiner le fichier
+            # Détecter le type de fichier
+            if uploaded_file.name.endswith(".csv"):
+                # Détecter l'encodage du fichier CSV
+                encodage = chardet.detect(uploaded_file.read())['encoding']
+                uploaded_file.seek(0)  # Rembobiner le fichier
 
-            df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')  # Utiliser 'quotechar' pour gérer les guillemets
+                df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
+            elif uploaded_file.name.endswith(".xlsx"):
+                df = pd.read_excel(uploaded_file)
+            else:
+                st.error("Type de fichier non pris en charge.")
+                return
+
             df = nettoyer_donnees(df)
 
             # Options d'analyse et de tri
