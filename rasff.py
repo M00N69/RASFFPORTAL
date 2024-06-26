@@ -4,7 +4,7 @@ from fuzzywuzzy import fuzz, process
 import plotly.express as px
 import chardet
 from io import StringIO
-import openpyxl  # Import openpyxl for Excel handling
+import openpyxl
 
 st.set_page_config(
     page_title="Analyseur RASFF",
@@ -130,8 +130,17 @@ def page_analyse():
 
                 df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
             elif uploaded_file.name.endswith(".xlsx"):
-                # Read the Excel file, forcing "reference" to be a string
-                df = pd.read_excel(uploaded_file, converters={'reference': str}) 
+                # Read the Excel file using openpyxl
+                wb = openpyxl.load_workbook(uploaded_file)
+                sheet = wb.active
+
+                # Convert "reference" to string before creating DataFrame
+                data = [[str(cell.value) for cell in row] for row in sheet.iter_rows()]
+                df = pd.DataFrame(data, columns=sheet.row_values(1))
+
+                # Handle "date" column (assuming it's formatted as text in Excel)
+                df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")  
+
             else:
                 st.error("Type de fichier non pris en charge.")
                 return
