@@ -59,23 +59,6 @@ def nettoyer_donnees(df):
     # 4. Gestion des valeurs manquantes
     df = df.fillna("")  # Remplace les valeurs manquantes par des chaînes vides
 
-    # 5. Gestion des caractères spéciaux dans la colonne "subject"
-    # Utiliser un détecteur d'encodage pour identifier l'encodage du fichier
-    encodage = chardet.detect(uploaded_file.read())['encoding']
-    uploaded_file.seek(0)  # Rembobiner le fichier
-
-    # Convertir le contenu du fichier en une chaîne de caractères avec l'encodage détecté
-    contenu_fichier = uploaded_file.read().decode(encodage)
-
-    # Diviser le contenu du fichier en lignes et remplacer les caractères non-ASCII par des espaces
-    lignes = [ligne.encode('ascii', 'ignore').decode('ascii') for ligne in contenu_fichier.splitlines()]
-
-    # Créer un nouveau StringIO pour recharger le DataFrame avec les lignes corrigées
-    fichier_corrige = StringIO('\n'.join(lignes))
-
-    # Recharger le DataFrame avec les lignes corrigées
-    df = pd.read_csv(fichier_corrige, encoding=encodage, quotechar='"')
-
     return df
 
 def page_accueil():
@@ -134,17 +117,19 @@ def page_analyse():
                 wb = openpyxl.load_workbook(uploaded_file)
                 sheet = wb.active
 
-                # Convert "reference" to string before creating DataFrame
-                data = [[str(cell.value) for cell in row] for row in sheet.iter_rows()]
+                # Convert all values to strings before creating DataFrame
+                data = [[str(cell.value) if cell.value is not None else "" for cell in row] for row in sheet.iter_rows(min_row=2)]
+
                 df = pd.DataFrame(data, columns=sheet.row_values(1))
 
                 # Handle "date" column (assuming it's formatted as text in Excel)
-                df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")  
+                df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")  # Correct format
 
             else:
                 st.error("Type de fichier non pris en charge.")
                 return
 
+            # Call the cleaning function here, *after* reading the file
             df = nettoyer_donnees(df)
 
             # Options d'analyse et de tri
