@@ -108,8 +108,11 @@ def page_analyse():
             # Détecter le type de fichier
             if uploaded_file.name.endswith(".csv"):
                 # Détecter l'encodage du fichier CSV
-                encodage = chardet.detect(uploaded_file.read())['encoding']
-                uploaded_file.seek(0)  # Rembobiner le fichier
+                # Read the file first
+                file_content = uploaded_file.read() 
+                encodage = chardet.detect(file_content)['encoding'] 
+                # Rewind the file pointer
+                uploaded_file.seek(0) 
 
                 df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
             elif uploaded_file.name.endswith(".xlsx"):
@@ -124,7 +127,6 @@ def page_analyse():
 
                 # Handle "date" column (assuming it's formatted as text in Excel)
                 df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")  # Correct format
-
             else:
                 st.error("Type de fichier non pris en charge.")
                 return
