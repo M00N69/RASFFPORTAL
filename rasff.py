@@ -60,7 +60,6 @@ def nettoyer_donnees(df):
             "gluten  too high content",
             # ... ajouter d'autres dangers ici
         ]
-
         # Using Levenshtein distance for faster fuzzy matching
         best_match = min(dangers_standardises, key=lambda x: distance(x, nom_danger)) 
         if distance(best_match, nom_danger) <= 3: # Adjust threshold as needed
@@ -68,7 +67,8 @@ def nettoyer_donnees(df):
         else:
             return nom_danger
 
-    df["hazards"] = df["hazards"].apply(corriger_dangers)
+    # Apply fuzzy matching to each row in the "hazards" column
+    df["hazards"] = df.apply(lambda row: corriger_dangers(row['hazards']), axis=1)
 
     # 3. Conversion des types de données ("date" only!)
     try:
@@ -133,6 +133,9 @@ def page_analyse():
 
             # Lire le fichier CSV avec le bon encodage 
             df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
+
+            # Convert "reference" to string (ensure it's text)
+            df['reference'] = df['reference'].astype(str) 
 
             # Appliquer la fonction de nettoyage
             df = nettoyer_donnees(df)
