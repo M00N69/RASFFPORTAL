@@ -42,6 +42,8 @@ def nettoyer_donnees(df):
     # 2. Correction des noms de dangers (fuzzy matching)
     def corriger_dangers(nom_danger):
         """Corrige les erreurs de frappe dans le nom d'un danger."""
+        # Explicitly convert to string
+        nom_danger = str(nom_danger)  
         dangers_standardises = [
             "chlorpyrifos",
             "chlorpyrifos-ethyl",
@@ -60,6 +62,7 @@ def nettoyer_donnees(df):
             "gluten  too high content",
             # ... ajouter d'autres dangers ici
         ]
+
         # Using Levenshtein distance for faster fuzzy matching
         best_match = min(dangers_standardises, key=lambda x: distance(x, nom_danger)) 
         if distance(best_match, nom_danger) <= 3: # Adjust threshold as needed
