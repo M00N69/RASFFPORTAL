@@ -99,7 +99,7 @@ def page_accueil():
     st.markdown("## Fonctionnalités")
     st.markdown(
         """
-        * **Téléchargement de fichier CSV :** Importez un fichier CSV contenant des données RASFF.
+        * **Téléchargement de fichier CSV ou Excel :** Importez un fichier CSV ou Excel contenant des données RASFF.
         * **Nettoyage des données :** L'outil nettoie et standardise les données pour une analyse plus précise, 
         en gérant les caractères spéciaux de différentes langues européennes.
         * **Statistiques descriptives :** Obtenez des informations clés sur les données, telles que le nombre total de notifications, les pays les plus souvent impliqués et les dangers les plus courants.
@@ -113,7 +113,7 @@ def page_accueil():
     st.markdown("## Instructions")
     st.markdown(
         """
-        1. Téléchargez un fichier CSV contenant des données RASFF à partir de la page "Analyse".
+        1. Téléchargez un fichier CSV ou Excel contenant des données RASFF à partir de la page "Analyse".
         2. Sélectionnez les options d'analyse et de tri souhaitées.
         3. Visualisez les résultats et exportez les données si nécessaire.
         """
@@ -123,24 +123,34 @@ def page_analyse():
     """Affiche la page d'analyse."""
     st.title("Analyse des Données RASFF")
 
-    # Téléchargement du fichier CSV
-    uploaded_file = st.file_uploader("Téléchargez un fichier CSV RASFF", type=["csv"])
+    # Téléchargement du fichier CSV ou Excel
+    uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel RASFF", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
         try: 
-            # Détecter l'encodage du fichier CSV
-            file_content = uploaded_file.read()
-            encodage = chardet.detect(file_content)['encoding']
-            # Rewind the file pointer
-            uploaded_file.seek(0)  
+            # Détecter le type de fichier
+            if uploaded_file.name.endswith(".csv"):
+                # Détecter l'encodage du fichier CSV
+                encodage = chardet.detect(uploaded_file.read())['encoding']
+                uploaded_file.seek(0)  # Rembobiner le fichier
 
-            # Lire le fichier CSV avec le bon encodage 
-            df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
+                df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
+            elif uploaded_file.name.endswith(".xlsx"):
+                # Read the Excel file using openpyxl
+                wb = openpyxl.load_workbook(uploaded_file)
+                sheet = wb.active
 
-            # Convert "reference" to string (ensure it's text)
-            df['reference'] = df['reference'].astype(str) 
+                # Convert "reference" to string before creating DataFrame
+                data = [[str(cell.value) for cell in row] for row in sheet.iter_rows()]
+                df = pd.DataFrame(data, columns=sheet.row_values(1))
 
-            # Appliquer la fonction de nettoyage
+                # Handle "date" column (assuming it's formatted as text in Excel)
+                df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")  
+
+            else:
+                st.error("Type de fichier non pris en charge.")
+                return
+
             df = nettoyer_donnees(df)
 
             # Options d'analyse et de tri
