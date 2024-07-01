@@ -1,5 +1,6 @@
-streamlit==1.22.0
-pandas==1.5.3
-plotly==5.14.1
-chardet==5.1.0
-python-Levenshtein==0.20.9
+streamlit
+pandas
+fuzzywuzzy
+plotly
+chardet
+python-Levenshtein
