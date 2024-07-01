@@ -114,7 +114,8 @@ def page_accueil():
     st.markdown(
         """
         1. Téléchargez un fichier CSV ou Excel contenant des données RASFF à partir de la page "Analyse".
-        2. **Sélectionnez les colonnes à afficher (important):** Choisissez les colonnes que vous souhaitez utiliser pour l'analyse. Il est important de choisir "notifying_country" et "reference" pour voir les résultats du graphique.
+        2. **Sélectionnez les colonnes à afficher (important):** Choisissez les colonnes que vous souhaitez utiliser pour l'analyse. 
+           - **Choisissez au moins "notifying_country" et "reference"** pour que le graphique "Nombre de notifications par pays" fonctionne correctement.
         3. Appliquez des filtres aux colonnes que vous avez sélectionnées. 
         4. Sélectionnez une colonne pour le tri et choisissez l'ordre de tri.
         5. Visualisez les résultats et exportez les données si nécessaire.
@@ -162,6 +163,10 @@ def page_analyse():
             colonnes_a_afficher = st.multiselect("Sélectionnez les colonnes à afficher", df.columns)
             df = df[colonnes_a_afficher]
 
+            st.markdown("**Explication:** Choisissez les colonnes que vous souhaitez utiliser pour l'analyse. "
+                       "Il est important de choisir **notifying_country** et **reference** "
+                       "pour que le graphique 'Nombre de notifications par pays' fonctionne correctement.")
+
             # Filtres
             filtres = {}
             for colonne in df.columns:
@@ -171,9 +176,15 @@ def page_analyse():
                     if filtre_colonne:
                         filtres[colonne] = filtre_colonne
 
+            st.markdown("**Explication:**  Sélectionnez les valeurs spécifiques dans les colonnes "
+                       "que vous avez choisies pour filtrer les données.")
+
             # Tri
             colonne_tri = st.selectbox("Trier par", df.columns)
             ordre_tri = st.radio("Ordre de tri", ("Croissant", "Décroissant"))
+
+            st.markdown("**Explication:** Choisissez la colonne par laquelle vous souhaitez trier les données "
+                       "et l'ordre de tri (Croissant - Ascendant, Décroissant - Descendant).")
 
             if ordre_tri == "Croissant":
                 ordre_tri = True
