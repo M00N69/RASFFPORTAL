@@ -49,12 +49,12 @@ def nettoyer_donnees(df):
 
     df["hazards"] = df["hazards"].apply(corriger_dangers)
 
-    # 3. Conversion des types de données
-    for colonne in ["reference", "date"]:
-        try:
-            df[colonne] = pd.to_datetime(df[colonne])
-        except ValueError:
-            st.warning(f"Impossible de convertir la colonne '{colonne}' en date.")
+    # 3. Conversion des types de données (MOVE THIS TO PAGE_ANALYSE!)
+    # for colonne in ["reference", "date"]:
+    #     try:
+    #         df[colonne] = pd.to_datetime(df[colonne])
+    #     except ValueError:
+    #         st.warning(f"Impossible de convertir la colonne '{colonne}' en date.")
 
     # 4. Gestion des valeurs manquantes
     df = df.fillna("")  # Remplace les valeurs manquantes par des chaînes vides
@@ -122,7 +122,7 @@ def page_analyse():
 
                 # Convert all values to strings before creating DataFrame
                 data = [[str(cell.value) if cell.value is not None else "" for cell in row] for row in sheet.iter_rows(min_row=2)]
-
+                
                 df = pd.DataFrame(data, columns=sheet.row_values(1))
 
                 # Handle "date" column (assuming it's formatted as text in Excel)
@@ -133,6 +133,13 @@ def page_analyse():
 
             # Call the cleaning function here, *after* reading the file
             df = nettoyer_donnees(df)
+
+            # 3. Conversion des types de données (NOW IN PAGE_ANALYSE)
+            for colonne in ["reference", "date"]:
+                try:
+                    df[colonne] = pd.to_datetime(df[colonne])
+                except ValueError:
+                    st.warning(f"Impossible de convertir la colonne '{colonne}' en date.")
 
             # Options d'analyse et de tri
             st.markdown("## Options d'analyse et de tri")
