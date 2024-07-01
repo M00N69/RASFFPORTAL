@@ -4,7 +4,6 @@ from fuzzywuzzy import fuzz, process
 import plotly.express as px
 import chardet
 from io import StringIO
-import openpyxl
 
 st.set_page_config(
     page_title="Analyseur RASFF",
@@ -49,12 +48,12 @@ def nettoyer_donnees(df):
 
     df["hazards"] = df["hazards"].apply(corriger_dangers)
 
-    # 3. Conversion des types de données (MOVE THIS TO PAGE_ANALYSE!)
-    # for colonne in ["reference", "date"]:
-    #     try:
-    #         df[colonne] = pd.to_datetime(df[colonne])
-    #     except ValueError:
-    #         st.warning(f"Impossible de convertir la colonne '{colonne}' en date.")
+    # 3. Conversion des types de données
+    for colonne in ["reference", "date"]:
+        try:
+            df[colonne] = pd.to_datetime(df[colonne])
+        except ValueError:
+            st.warning(f"Impossible de convertir la colonne '{colonne}' en date.")
 
     # 4. Gestion des valeurs manquantes
     df = df.fillna("")  # Remplace les valeurs manquantes par des chaînes vides
@@ -76,7 +75,7 @@ def page_accueil():
     st.markdown("## Fonctionnalités")
     st.markdown(
         """
-        * **Téléchargement de fichier CSV ou Excel :** Importez un fichier CSV ou Excel contenant des données RASFF.
+        * **Téléchargement de fichier CSV :** Importez un fichier CSV contenant des données RASFF.
         * **Nettoyage des données :** L'outil nettoie et standardise les données pour une analyse plus précise, 
         en gérant les caractères spéciaux de différentes langues européennes.
         * **Statistiques descriptives :** Obtenez des informations clés sur les données, telles que le nombre total de notifications, les pays les plus souvent impliqués et les dangers les plus courants.
@@ -90,7 +89,7 @@ def page_accueil():
     st.markdown("## Instructions")
     st.markdown(
         """
-        1. Téléchargez un fichier CSV ou Excel contenant des données RASFF à partir de la page "Analyse".
+        1. Téléchargez un fichier CSV contenant des données RASFF à partir de la page "Analyse".
         2. Sélectionnez les options d'analyse et de tri souhaitées.
         3. Visualisez les résultats et exportez les données si nécessaire.
         """
@@ -100,46 +99,22 @@ def page_analyse():
     """Affiche la page d'analyse."""
     st.title("Analyse des Données RASFF")
 
-    # Téléchargement du fichier CSV ou Excel
-    uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel RASFF", type=["csv", "xlsx"])
+    # Téléchargement du fichier CSV
+    uploaded_file = st.file_uploader("Téléchargez un fichier CSV RASFF", type=["csv"])
 
     if uploaded_file is not None:
         try:
-            # Détecter le type de fichier
-            if uploaded_file.name.endswith(".csv"):
-                # Détecter l'encodage du fichier CSV
-                # Read the file first
-                file_content = uploaded_file.read() 
-                encodage = chardet.detect(file_content)['encoding'] 
-                # Rewind the file pointer
-                uploaded_file.seek(0) 
+            # Détecter l'encodage du fichier CSV
+            # Read the file first
+            file_content = uploaded_file.read()
+            encodage = chardet.detect(file_content)['encoding']
+            # Rewind the file pointer
+            uploaded_file.seek(0)  
 
-                df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
-            elif uploaded_file.name.endswith(".xlsx"):
-                # Read the Excel file using openpyxl
-                wb = openpyxl.load_workbook(uploaded_file)
-                sheet = wb.active
-
-                # Convert all values to strings before creating DataFrame
-                data = [[str(cell.value) if cell.value is not None else "" for cell in row] for row in sheet.iter_rows(min_row=2)]
-                
-                df = pd.DataFrame(data, columns=sheet.row_values(1))
-
-                # Handle "date" column (assuming it's formatted as text in Excel)
-                df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")  # Correct format
-            else:
-                st.error("Type de fichier non pris en charge.")
-                return
+            df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
 
             # Call the cleaning function here, *after* reading the file
             df = nettoyer_donnees(df)
-
-            # 3. Conversion des types de données (NOW IN PAGE_ANALYSE)
-            for colonne in ["reference", "date"]:
-                try:
-                    df[colonne] = pd.to_datetime(df[colonne])
-                except ValueError:
-                    st.warning(f"Impossible de convertir la colonne '{colonne}' en date.")
 
             # Options d'analyse et de tri
             st.markdown("## Options d'analyse et de tri")
