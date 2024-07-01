@@ -114,8 +114,10 @@ def page_accueil():
     st.markdown(
         """
         1. Téléchargez un fichier CSV ou Excel contenant des données RASFF à partir de la page "Analyse".
-        2. Sélectionnez les options d'analyse et de tri souhaitées.
-        3. Visualisez les résultats et exportez les données si nécessaire.
+        2. **Sélectionnez les colonnes à afficher (important):** Choisissez les colonnes que vous souhaitez utiliser pour l'analyse. Il est important de choisir "notifying_country" et "reference" pour voir les résultats du graphique.
+        3. Appliquez des filtres aux colonnes que vous avez sélectionnées. 
+        4. Sélectionnez une colonne pour le tri et choisissez l'ordre de tri.
+        5. Visualisez les résultats et exportez les données si nécessaire.
         """
     )
 
@@ -127,7 +129,7 @@ def page_analyse():
     uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel RASFF", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
-        try: 
+        try:
             # Détecter le type de fichier
             if uploaded_file.name.endswith(".csv"):
                 # Détecter l'encodage du fichier CSV
@@ -198,7 +200,8 @@ def page_analyse():
 
             # Graphique à barres (nombre de notifications par pays)
             st.markdown("### Nombre de notifications par pays")
-            fig_pays = px.bar(df, x="notifying_country", y="reference", title="Nombre de notifications par pays")
+            # Now, the column "notifying_country" should be available 
+            fig_pays = px.bar(df, x="notifying_country", y="reference", title="Nombre de notifications par pays") 
             st.plotly_chart(fig_pays, use_container_width=True)
 
             # Histogramme (distribution des dangers)
