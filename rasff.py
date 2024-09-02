@@ -1,10 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import chardet
 import requests
 from io import BytesIO
-import openpyxl
 from Levenshtein import distance
 import datetime
 
@@ -31,10 +29,13 @@ def corriger_dangers(nom_danger):
     else:
         return nom_danger
 
-def mapper_danger_a_categorie(danger):
-    """Mappe un danger à sa catégorie de danger correspondante."""
+def mapper_danger_a_categorie(danger, subject):
+    """Mappe un danger à sa catégorie de danger correspondante en utilisant les colonnes 'hazards' et 'subject'."""
+    danger_lower = danger.lower()
+    subject_lower = subject.lower()
+    
     for categorie, description in hazard_categories.items():
-        if description.lower() in danger.lower():
+        if description.lower() in danger_lower or description.lower() in subject_lower:
             return categorie
     return "Autre"  # Si aucun match n'est trouvé
 
@@ -48,10 +49,10 @@ def nettoyer_donnees(df):
     # Normaliser les catégories de produits
     df["category"] = df["category"].apply(lambda x: product_categories.get(x, x))
 
-    # Corriger et mapper les dangers à leurs catégories
-    if "hazards" in df.columns:
+    # Corriger et mapper les dangers à leurs catégories en utilisant aussi le 'subject'
+    if "hazards" in df.columns and "subject" in df.columns:
         df["hazards"] = df["hazards"].apply(corriger_dangers)
-        df["hazard_category"] = df["hazards"].apply(mapper_danger_a_categorie)
+        df["hazard_category"] = df.apply(lambda row: mapper_danger_a_categorie(row['hazards'], row['subject']), axis=1)
 
     # Conversion des dates
     try:
