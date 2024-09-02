@@ -8,6 +8,13 @@ import openpyxl
 from Levenshtein import distance
 import datetime
 
+# Importer les listes depuis les fichiers séparés
+from product_categories import product_categories
+from hazards import hazards
+from hazard_categories import hazard_categories
+from notifying_countries import notifying_countries
+from origin_countries import origin_countries
+
 st.set_page_config(
     page_title="Analyseur RASFF",
     page_icon="📊",
@@ -18,25 +25,7 @@ st.set_page_config(
 def corriger_dangers(nom_danger):
     """Corrige les erreurs de frappe dans le nom d'un danger."""
     nom_danger = str(nom_danger)
-    dangers_standardises = [
-        "chlorpyrifos",
-        "chlorpyrifos-ethyl",
-        "Salmonella",
-        "Salmonella spp.",
-        "Salmonella Enteritidis",
-        "Aflatoxin",
-        "Aflatoxin B1",
-        "aflatoxin total",
-        "ochratoxin A",
-        "E220- sulfur dioxide", 
-        "cadmium",
-        "Listeria monocytogenes",
-        "norovirus",
-        "peanut undeclared",
-        "gluten too high content",
-        # ... ajouter d'autres dangers ici
-    ]
-    best_match = min(dangers_standardises, key=lambda x: distance(x, nom_danger))
+    best_match = min(hazards, key=lambda x: distance(x, nom_danger))
     if distance(best_match, nom_danger) <= 3:
         return best_match
     else:
@@ -46,109 +35,14 @@ def nettoyer_donnees(df):
     """Nettoie et standardise les données du DataFrame."""
     
     # Normaliser les noms de pays et d'origine
-    def normaliser_pays(nom_pays):
-        pays_standardises = {
-            "France": "France",
-            "United Kingdom": "Royaume-Uni",
-            "Türkiye": "Turquie",
-            "Poland": "Pologne",
-            "Netherlands": "Pays-Bas",
-            "Italy": "Italie",
-            "Germany": "Allemagne",
-            "Spain": "Espagne",
-            "Czech Republic": "République tchèque",
-            "Greece": "Grèce",
-            "Egypt": "Égypte",
-            "United States": "États-Unis",
-            # ... ajouter d'autres pays ici
-        }
-        return pays_standardises.get(nom_pays, nom_pays)
-
-    df["notifying_country"] = df["notifying_country"].apply(normaliser_pays)
-    df["origin"] = df["origin"].apply(normaliser_pays)
+    df["notifying_country"] = df["notifying_country"].apply(lambda x: x if x in notifying_countries else x)
+    df["origin"] = df["origin"].apply(lambda x: x if x in origin_countries else x)
 
     # Normaliser les catégories de produits
-    def normaliser_categories_produits(categorie_produit):
-        categories_produits_standardisees = {
-            "alcoholic beverages": "Boissons alcoolisées",
-            "animal by-products": "Sous-produits animaux",
-            "bivalve molluscs and products thereof": "Mollusques bivalves et leurs produits",
-            "cephalopods and products thereof": "Céphalopodes et leurs produits",
-            "cereals and bakery products": "Céréales et produits de boulangerie",
-            "cocoa and cocoa preparations, coffee and tea": "Cacao et préparations de cacao, café et thé",
-            "compound feeds": "Aliments composés",
-            "confectionery": "Confiserie",
-            "crustaceans and products thereof": "Crustacés et leurs produits",
-            "dietetic foods, food supplements and fortified foods": "Aliments diététiques, compléments alimentaires et aliments enrichis",
-            "eggs and egg products": "Œufs et produits à base d'œufs",
-            "fats and oils": "Graisses et huiles",
-            "feed additives": "Additifs pour l'alimentation animale",
-            "feed materials": "Matières premières pour aliments",
-            "feed premixtures": "Prémélanges pour aliments",
-            "fish and fish products": "Poissons et produits à base de poissons",
-            "food additives and flavourings": "Additifs alimentaires et arômes",
-            "food contact materials": "Matériaux en contact avec les aliments",
-            "fruits and vegetables": "Fruits et légumes",
-            "gastropods": "Gastéropodes",
-            "herbs and spices": "Herbes et épices",
-            "honey and royal jelly": "Miel et gelée royale",
-            "ices and desserts": "Glaces et desserts",
-            "live animals": "Animaux vivants",
-            "meat and meat products (other than poultry)": "Viande et produits carnés (autres que volaille)",
-            "milk and milk products": "Lait et produits laitiers",
-            "natural mineral waters": "Eaux minérales naturelles",
-            "non-alcoholic beverages": "Boissons non alcoolisées",
-            "nuts, nut products and seeds": "Noix, produits à base de noix et graines",
-            "other food product / mixed": "Autres produits alimentaires / mixtes",
-            "pet food": "Aliments pour animaux de compagnie",
-            "plant protection products": "Produits de protection des plantes",
-            "poultry meat and poultry meat products": "Viande de volaille et produits à base de viande de volaille",
-            "prepared dishes and snacks": "Plats préparés et snacks",
-            "soups, broths, sauces and condiments": "Soupes, bouillons, sauces et condiments",
-            "water for human consumption (other)": "Eau pour la consommation humaine (autres)",
-            "wine": "Vin",
-        }
-        return categories_produits_standardisees.get(categorie_produit, categorie_produit)
-    
-    df["category"] = df["category"].apply(normaliser_categories_produits)
+    df["category"] = df["category"].apply(lambda x: product_categories.get(x, x))
 
     # Normaliser les catégories de dangers
-    def normaliser_categories_dangers(categorie_danger):
-        categories_dangers_standardisees = {
-            "GMO / novel food": "OGM / nouveau aliment",
-            "TSEs": "EST",
-            "adulteration / fraud": "Adultération / fraude",
-            "allergens": "Allergènes",
-            "biological contaminants": "Contaminants biologiques",
-            "biotoxins (other)": "Biotoxines (autres)",
-            "chemical contamination (other)": "Contamination chimique (autres)",
-            "composition": "Composition",
-            "environmental pollutants": "Polluants environnementaux",
-            "feed additives": "Additifs pour l'alimentation animale",
-            "food additives and flavourings": "Additifs alimentaires et arômes",
-            "foreign bodies": "Corps étrangers",
-            "genetically modified": "Génétiquement modifié",
-            "heavy metals": "Métaux lourds",
-            "industrial contaminants": "Contaminants industriels",
-            "labelling absent/incomplete/incorrect": "Étiquetage absent/incomplet/incorrect",
-            "migration": "Migration",
-            "mycotoxins": "Mycotoxines",
-            "natural toxins (other)": "Toxines naturelles (autres)",
-            "non-pathogenic micro-organisms": "Micro-organismes non pathogènes",
-            "not determined (other)": "Non déterminé (autres)",
-            "novel food": "Nouveau aliment",
-            "organoleptic aspects": "Aspects organoleptiques",
-            "packaging defective / incorrect": "Emballage défectueux / incorrect",
-            "parasitic infestation": "Infestation parasitaire",
-            "pathogenic micro-organisms": "Micro-organismes pathogènes",
-            "pesticide residues": "Résidus de pesticides",
-            "poor or insufficient controls": "Contrôles insuffisants ou de mauvaise qualité",
-            "radiation": "Radiation",
-            "residues of veterinary medicinal": "Résidus de médicaments vétérinaires",
-        }
-        return categories_dangers_standardisees.get(categorie_danger, categorie_danger)
-    
-    df["hazards"] = df["hazards"].apply(normaliser_categories_dangers)
+    df["hazards"] = df["hazards"].apply(lambda x: hazard_categories.get(x, x))
 
     # Appliquer la correction des dangers avec Levenshtein
     if "hazards" in df.columns:
@@ -161,35 +55,6 @@ def nettoyer_donnees(df):
         st.warning(f"Impossible de convertir la colonne 'date' en date.")
     df = df.fillna("")
     return df
-
-def page_accueil():
-    """Affiche la page d'accueil."""
-    st.title("Analyseur de Données RASFF")
-    st.markdown("## Bienvenue !")
-    st.markdown(
-        """
-        Cet outil vous permet d'analyser les données du système RASFF (Rapid Alert System for Food and Feed). 
-        Il vous offre des fonctionnalités puissantes pour explorer les tendances, identifier les risques et 
-        comprendre les problèmes de sécurité alimentaire.
-        """
-    )
-    st.markdown("## Fonctionnalités")
-    st.markdown(
-        """
-        * **Téléchargement et analyse de données :** L'outil peut télécharger automatiquement les fichiers RASFF classés par semaine.
-        * **Nettoyage automatique des données :** Les données sont nettoyées et standardisées pour assurer une analyse cohérente.
-        * **Statistiques descriptives et visualisations :** Obtenez des informations clés et visualisez les données via des graphiques interactifs.
-        * **Analyse de tendances :** Découvrez les tendances émergentes dans les notifications RASFF.
-        """
-    )
-    st.markdown("## Instructions")
-    st.markdown(
-        """
-        1. Sélectionnez l'année et les semaines que vous souhaitez analyser.
-        2. Les données seront automatiquement téléchargées et analysées.
-        3. Visualisez les résultats et explorez les statistiques descriptives et les corrélations.
-        """
-    )
 
 def telecharger_et_nettoyer_donnees(annee, semaines):
     """Télécharge et combine les données de plusieurs semaines."""
@@ -220,6 +85,35 @@ def calculer_statistiques_descriptives(df):
     # Calcul des statistiques descriptives
     stats = grouped['Nombre de notifications'].describe()
     return stats, grouped
+
+def page_accueil():
+    """Affiche la page d'accueil."""
+    st.title("Analyseur de Données RASFF")
+    st.markdown("## Bienvenue !")
+    st.markdown(
+        """
+        Cet outil vous permet d'analyser les données du système RASFF (Rapid Alert System for Food and Feed). 
+        Il vous offre des fonctionnalités puissantes pour explorer les tendances, identifier les risques et 
+        comprendre les problèmes de sécurité alimentaire.
+        """
+    )
+    st.markdown("## Fonctionnalités")
+    st.markdown(
+        """
+        * **Téléchargement et analyse de données :** L'outil peut télécharger automatiquement les fichiers RASFF classés par semaine.
+        * **Nettoyage automatique des données :** Les données sont nettoyées et standardisées pour assurer une analyse cohérente.
+        * **Statistiques descriptives et visualisations :** Obtenez des informations clés et visualisez les données via des graphiques interactifs.
+        * **Analyse de tendances :** Découvrez les tendances émergentes dans les notifications RASFF.
+        """
+    )
+    st.markdown("## Instructions")
+    st.markdown(
+        """
+        1. Sélectionnez l'année et les semaines que vous souhaitez analyser.
+        2. Les données seront automatiquement téléchargées et analysées.
+        3. Visualisez les résultats et explorez les statistiques descriptives et les corrélations.
+        """
+    )
 
 def page_analyse():
     """Affiche la page d'analyse."""
