@@ -31,6 +31,13 @@ def corriger_dangers(nom_danger):
     else:
         return nom_danger
 
+def mapper_danger_a_categorie(danger):
+    """Mappe un danger à sa catégorie de danger correspondante."""
+    for categorie, description in hazard_categories.items():
+        if description.lower() in danger.lower():
+            return categorie
+    return "Autre"  # Si aucun match n'est trouvé
+
 def nettoyer_donnees(df):
     """Nettoie et standardise les données du DataFrame."""
     
@@ -41,12 +48,10 @@ def nettoyer_donnees(df):
     # Normaliser les catégories de produits
     df["category"] = df["category"].apply(lambda x: product_categories.get(x, x))
 
-    # Normaliser les catégories de dangers
-    df["hazards"] = df["hazards"].apply(lambda x: hazard_categories.get(x, x))
-
-    # Appliquer la correction des dangers avec Levenshtein
+    # Corriger et mapper les dangers à leurs catégories
     if "hazards" in df.columns:
-        df["hazards"] = df.apply(lambda row: corriger_dangers(row['hazards']), axis=1)
+        df["hazards"] = df["hazards"].apply(corriger_dangers)
+        df["hazard_category"] = df["hazards"].apply(mapper_danger_a_categorie)
 
     # Conversion des dates
     try:
@@ -80,7 +85,7 @@ def telecharger_et_nettoyer_donnees(annee, semaines):
 def calculer_statistiques_descriptives(df):
     """Calcule les statistiques descriptives pour le nombre de notifications par pays et par type de danger."""
     # Groupement par pays et par danger
-    grouped = df.groupby(['notifying_country', 'hazards']).size().reset_index(name='Nombre de notifications')
+    grouped = df.groupby(['notifying_country', 'hazard_category']).size().reset_index(name='Nombre de notifications')
     
     # Calcul des statistiques descriptives
     stats = grouped['Nombre de notifications'].describe()
@@ -127,8 +132,13 @@ def page_analyse():
         df = telecharger_et_nettoyer_donnees(annee, semaines)
         if not df.empty:
             # Sélection automatique des colonnes nécessaires
-            colonnes_a_afficher = ['notifying_country', 'category', 'hazards', 'date'] if 'hazards' in df.columns else ['notifying_country', 'category', 'date']
+            colonnes_a_afficher = ['notifying_country', 'category', 'hazard_category', 'date'] if 'hazard_category' in df.columns else ['notifying_country', 'category', 'date']
             df = df[colonnes_a_afficher]
+
+            # **Nouveau** : Filtrer par catégorie de dangers
+            categories_dangers_selectionnees = st.multiselect("Filtrez par catégories de dangers", df['hazard_category'].unique())
+            if categories_dangers_selectionnees:
+                df = df[df['hazard_category'].isin(categories_dangers_selectionnees)]
 
             # Calculer les statistiques descriptives sur le nombre de notifications par pays et type de danger
             stats, grouped = calculer_statistiques_descriptives(df)
@@ -141,7 +151,7 @@ def page_analyse():
                 **Données analysées :**
                 - `notifying_country` : Le pays ayant émis la notification.
                 - `category` : Catégorie du produit ou matériel concerné par la notification.
-                - `hazards` : (si disponible) Catégorie du danger rapporté dans la notification.
+                - `hazard_category` : Catégorie de danger associée au danger rapporté.
                 - `date` : Date de la notification.
                 """
             )
@@ -163,10 +173,15 @@ def page_analyse():
             st.plotly_chart(fig_pays, use_container_width=True)
 
             # Histogramme (distribution des dangers) si applicable
-            if "hazards" in df.columns:
-                st.markdown("### Distribution des dangers")
-                fig_dangers = px.histogram(grouped, x="hazards", y="Nombre de notifications", title="Distribution des dangers")
+            if "hazard_category" in df.columns:
+                st.markdown("### Distribution des catégories de dangers")
+                fig_dangers = px.histogram(grouped, x="hazard_category", y="Nombre de notifications", title="Distribution des catégories de dangers")
                 st.plotly_chart(fig_dangers, use_container_width=True)
+
+            # **Nouveau** : Diagramme camembert sur les catégories de produits
+            st.markdown("### Répartition des notifications par catégories de produits")
+            fig_pie = px.pie(df, names='category', title="Répartition des notifications par catégories de produits")
+            st.plotly_chart(fig_pie, use_container_width=True)
 
         else:
             st.error("Aucune donnée disponible pour les semaines sélectionnées.")
