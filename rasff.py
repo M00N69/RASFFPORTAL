@@ -138,7 +138,7 @@ def page_analyse():
         df = telecharger_et_nettoyer_donnees(annee, semaines)
         if not df.empty:
             # Sélection automatique des colonnes nécessaires
-            colonnes_a_afficher = ['notifying_country', 'reference', 'hazards', 'date'] if 'hazards' in df.columns else ['notifying_country', 'reference', 'date']
+            colonnes_a_afficher = ['notifying_country', 'type', 'hazards', 'date'] if 'hazards' in df.columns else ['notifying_country', 'type', 'date']
             df = df[colonnes_a_afficher]
 
             # Explication des données analysées
@@ -148,7 +148,7 @@ def page_analyse():
                 """
                 **Données analysées :**
                 - `notifying_country` : Le pays ayant émis la notification.
-                - `reference` : Référence unique de chaque notification.
+                - `type` : Le type de produit ou de matériel concerné par la notification.
                 - `hazards` : (si disponible) Type de danger rapporté dans la notification.
                 - `date` : Date de la notification.
                 """
@@ -163,7 +163,7 @@ def page_analyse():
 
             # Graphique à barres (nombre de notifications par pays)
             st.markdown("### Nombre de notifications par pays")
-            fig_pays = px.bar(df, x="notifying_country", y="reference", title="Nombre de notifications par pays", labels={'reference': 'Nombre de notifications'})
+            fig_pays = px.bar(df, x="notifying_country", y=df.index, title="Nombre de notifications par pays", labels={'y': 'Nombre de notifications'})
             st.plotly_chart(fig_pays, use_container_width=True)
 
             # Histogramme (distribution des dangers) si applicable
