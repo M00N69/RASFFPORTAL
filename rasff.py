@@ -212,6 +212,15 @@ def telecharger_et_nettoyer_donnees(annee, semaines):
     else:
         return pd.DataFrame()  # Retourne un DataFrame vide si aucun fichier n'a pu être téléchargé
 
+def calculer_statistiques_descriptives(df):
+    """Calcule les statistiques descriptives pour le nombre de notifications par pays et par type de danger."""
+    # Groupement par pays et par danger
+    grouped = df.groupby(['notifying_country', 'hazards']).size().reset_index(name='Nombre de notifications')
+    
+    # Calcul des statistiques descriptives
+    stats = grouped['Nombre de notifications'].describe()
+    return stats, grouped
+
 def page_analyse():
     """Affiche la page d'analyse."""
     st.title("Analyse des Données RASFF")
@@ -227,6 +236,9 @@ def page_analyse():
             colonnes_a_afficher = ['notifying_country', 'category', 'hazards', 'date'] if 'hazards' in df.columns else ['notifying_country', 'category', 'date']
             df = df[colonnes_a_afficher]
 
+            # Calculer les statistiques descriptives sur le nombre de notifications par pays et type de danger
+            stats, grouped = calculer_statistiques_descriptives(df)
+
             # Explication des données analysées
             st.markdown("## Données analysées")
             st.dataframe(df)
@@ -241,37 +253,27 @@ def page_analyse():
             )
 
             # Statistiques descriptives
-            st.markdown("## Statistiques descriptives")
-            st.write(df.describe(include='all'))
+            st.markdown("## Statistiques descriptives sur les notifications")
+            st.write(stats)
+
+            # Afficher le nombre de notifications par pays et type de danger
+            st.markdown("### Nombre de notifications par pays et type de danger")
+            st.dataframe(grouped)
 
             # Analyse de tendances
             st.markdown("## Analyse de tendances")
 
             # Graphique à barres (nombre de notifications par pays)
             st.markdown("### Nombre de notifications par pays")
-            fig_pays = px.bar(df, x="notifying_country", y=df.index, title="Nombre de notifications par pays", labels={'y': 'Nombre de notifications'})
+            fig_pays = px.bar(grouped, x="notifying_country", y="Nombre de notifications", title="Nombre de notifications par pays")
             st.plotly_chart(fig_pays, use_container_width=True)
 
             # Histogramme (distribution des dangers) si applicable
             if "hazards" in df.columns:
                 st.markdown("### Distribution des dangers")
-                fig_dangers = px.histogram(df, x="hazards", title="Distribution des dangers")
+                fig_dangers = px.histogram(grouped, x="hazards", y="Nombre de notifications", title="Distribution des dangers")
                 st.plotly_chart(fig_dangers, use_container_width=True)
 
-            # Analyse de corrélation
-            if len(df.select_dtypes(include=["number"]).columns) > 1:
-                st.markdown("## Analyse de corrélation")
-                st.markdown("### Matrice de corrélation")
-                correlation_matrix = df.corr()
-                fig_correlation = px.imshow(correlation_matrix, color_continuous_scale='RdBu_r', title="Matrice de corrélation")
-                st.plotly_chart(fig_correlation, use_container_width=True)
-
-                # Graphique à barres (corrélation entre deux variables)
-                st.markdown("### Corrélation entre deux variables")
-                colonne_x = st.selectbox("Sélectionnez la première variable", df.columns)
-                colonne_y = st.selectbox("Sélectionnez la deuxième variable", df.columns)
-                fig_correlation_variables = px.bar(df, x=colonne_x, y=colonne_y, title=f"Corrélation entre {colonne_x} et {colonne_y}")
-                st.plotly_chart(fig_correlation_variables, use_container_width=True)
         else:
             st.error("Aucune donnée disponible pour les semaines sélectionnées.")
 
