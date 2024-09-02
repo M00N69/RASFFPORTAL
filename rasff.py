@@ -127,7 +127,7 @@ def page_analyse():
     st.title("Analyse des Données RASFF")
 
     # Téléchargement du fichier CSV ou Excel
-    uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel RASFF", type=["csv", "xlsx"])
+    uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel RASFF", type=["csv", "xlsx", "xls"])
 
     if uploaded_file is not None:
         try:
