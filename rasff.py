@@ -5,7 +5,8 @@ import chardet
 import requests
 from io import BytesIO
 import openpyxl
-from Levenshtein import distance  # Import Levenshtein for faster fuzzy matching
+from Levenshtein import distance
+import datetime
 
 st.set_page_config(
     page_title="Analyseur RASFF",
@@ -16,8 +17,6 @@ st.set_page_config(
 
 def nettoyer_donnees(df):
     """Nettoie et standardise les données du DataFrame."""
-
-    # 1. Normaliser les noms de pays et d'origine
     def normaliser_pays(nom_pays):
         """Normalise le nom d'un pays."""
         pays_standardises = {
@@ -40,11 +39,9 @@ def nettoyer_donnees(df):
     df["notifying_country"] = df["notifying_country"].apply(normaliser_pays)
     df["origin"] = df["origin"].apply(normaliser_pays)
 
-    # 2. Correction des noms de dangers (fuzzy matching)
     def corriger_dangers(nom_danger):
         """Corrige les erreurs de frappe dans le nom d'un danger."""
-        # Explicitly convert to string
-        nom_danger = str(nom_danger)  
+        nom_danger = str(nom_danger)
         dangers_standardises = [
             "chlorpyrifos",
             "chlorpyrifos-ethyl",
@@ -63,26 +60,20 @@ def nettoyer_donnees(df):
             "gluten  too high content",
             # ... ajouter d'autres dangers ici
         ]
-
-        # Using Levenshtein distance for faster fuzzy matching
-        best_match = min(dangers_standardises, key=lambda x: distance(x, nom_danger)) 
-        if distance(best_match, nom_danger) <= 3: # Adjust threshold as needed
+        best_match = min(dangers_standardises, key=lambda x: distance(x, nom_danger))
+        if distance(best_match, nom_danger) <= 3:
             return best_match
         else:
             return nom_danger
 
-    # Apply fuzzy matching to each row in the "hazards" column
-    df["hazards"] = df.apply(lambda row: corriger_dangers(row['hazards']), axis=1)
+    if "hazards" in df.columns:
+        df["hazards"] = df.apply(lambda row: corriger_dangers(row['hazards']), axis=1)
 
-    # 3. Conversion des types de données ("date" only!)
     try:
         df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")
     except ValueError:
         st.warning(f"Impossible de convertir la colonne 'date' en date.")
-
-    # 4. Gestion des valeurs manquantes
-    df = df.fillna("")  # Remplace les valeurs manquantes par des chaînes vides
-
+    df = df.fillna("")
     return df
 
 def page_accueil():
@@ -96,139 +87,107 @@ def page_accueil():
         comprendre les problèmes de sécurité alimentaire.
         """
     )
-
     st.markdown("## Fonctionnalités")
     st.markdown(
         """
-        * **Téléchargement de fichier CSV ou Excel :** Importez un fichier CSV ou Excel contenant des données RASFF.
-        * **Nettoyage des données :** L'outil nettoie et standardise les données pour une analyse plus précise, 
-        en gérant les caractères spéciaux de différentes langues européennes.
-        * **Statistiques descriptives :** Obtenez des informations clés sur les données, telles que le nombre total de notifications, les pays les plus souvent impliqués et les dangers les plus courants.
-        * **Analyse de tendances :** Identifiez les tendances émergentes dans les notifications RASFF, comme les dangers qui augmentent ou diminuent au fil du temps.
-        * **Visualisations :** Visualisez les données à l'aide de graphiques et de tableaux interactifs pour une meilleure compréhension.
-        * **Filtres et tri :** Filtrez et triez les données en fonction de critères spécifiques pour répondre à vos questions d'analyse.
-        * **Analyse de corrélation :**  Étudiez les relations entre les différentes variables des données.
+        * **Téléchargement et analyse de données :** L'outil peut télécharger automatiquement les fichiers RASFF classés par semaine.
+        * **Nettoyage automatique des données :** Les données sont nettoyées et standardisées pour assurer une analyse cohérente.
+        * **Statistiques descriptives et visualisations :** Obtenez des informations clés et visualisez les données via des graphiques interactifs.
+        * **Analyse de tendances :** Découvrez les tendances émergentes dans les notifications RASFF.
         """
     )
-
     st.markdown("## Instructions")
     st.markdown(
         """
-        1. Téléchargez un fichier CSV ou Excel contenant des données RASFF à partir de la page "Analyse".
-        2. **Sélectionnez les colonnes à afficher (important):** Choisissez les colonnes que vous souhaitez utiliser pour l'analyse. 
-           - **Choisissez au moins "notifying_country" et "reference"** pour que le graphique "Nombre de notifications par pays" fonctionne correctement.
-        3. Appliquez des filtres aux colonnes que vous avez sélectionnées. 
-        4. Sélectionnez une colonne pour le tri et choisissez l'ordre de tri.
-        5. Visualisez les résultats et exportez les données si nécessaire.
+        1. Sélectionnez l'année et les semaines que vous souhaitez analyser.
+        2. Les données seront automatiquement téléchargées et analysées.
+        3. Visualisez les résultats et explorez les statistiques descriptives et les corrélations.
         """
     )
+
+def telecharger_et_nettoyer_donnees(annee, semaines):
+    """Télécharge et combine les données de plusieurs semaines."""
+    dfs = []
+    url_template = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
+    
+    for semaine in semaines:
+        url = url_template.format(str(annee)[2:], annee, str(semaine).zfill(2))
+        response = requests.get(url)
+        if response.status_code == 200:
+            df = pd.read_excel(BytesIO(response.content))
+            dfs.append(df)
+        else:
+            st.error(f"Échec du téléchargement des données pour la semaine {semaine}.")
+    
+    if dfs:
+        df = pd.concat(dfs, ignore_index=True)
+        df = nettoyer_donnees(df)
+        return df
+    else:
+        return pd.DataFrame()  # Retourne un DataFrame vide si aucun fichier n'a pu être téléchargé
 
 def page_analyse():
     """Affiche la page d'analyse."""
     st.title("Analyse des Données RASFF")
 
-    # Formulaire pour saisir l'année et la semaine
-    st.markdown("### Charger un fichier par année et semaine")
-    annee = st.number_input("Entrez l'année", min_value=2000, max_value=2100, value=2024)
-    semaine = st.number_input("Entrez le numéro de la semaine", min_value=1, max_value=52, value=34)
+    # Formulaire pour saisir l'année et les semaines
+    annee = st.number_input("Entrez l'année", min_value=2000, max_value=datetime.datetime.now().year, value=datetime.datetime.now().year)
+    semaines = st.multiselect("Sélectionnez les semaines", list(range(1, min(36, datetime.datetime.now().isocalendar()[1] + 1))), default=[35])
 
-    # Génération de l'URL à partir de l'année et de la semaine
-    url_template = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
-    url = url_template.format(str(annee)[2:], annee, str(semaine).zfill(2))
-
-    # Téléchargement du fichier
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            st.success(f"Fichier téléchargé depuis : {url}")
-            df = pd.read_excel(BytesIO(response.content))
-
-            # Nettoyage et analyse des données
-            df = nettoyer_donnees(df)
-
-            # Options d'analyse et de tri
-            st.markdown("## Options d'analyse et de tri")
-
-            # Sélection de colonnes
-            colonnes_a_afficher = st.multiselect("Sélectionnez les colonnes à afficher", df.columns)
+    if semaines:
+        df = telecharger_et_nettoyer_donnees(annee, semaines)
+        if not df.empty:
+            # Sélection automatique des colonnes nécessaires
+            colonnes_a_afficher = ['notifying_country', 'reference', 'hazards', 'date'] if 'hazards' in df.columns else ['notifying_country', 'reference', 'date']
             df = df[colonnes_a_afficher]
 
-            st.markdown("**Explication:** Choisissez les colonnes que vous souhaitez utiliser pour l'analyse. "
-                        "Il est important de choisir **notifying_country** et **reference** "
-                        "pour que le graphique 'Nombre de notifications par pays' fonctionne correctement.")
-
-            # Filtres
-            filtres = {}
-            for colonne in df.columns:
-                if df[colonne].dtype == "object":
-                    options = df[colonne].unique()
-                    filtre_colonne = st.multiselect(f"Filtrez {colonne}", options)
-                    if filtre_colonne:
-                        filtres[colonne] = filtre_colonne
-
-            st.markdown("**Explication:** Sélectionnez les valeurs spécifiques dans les colonnes "
-                        "que vous avez choisies pour filtrer les données.")
-
-            # Tri
-            colonne_tri = st.selectbox("Trier par", df.columns)
-            ordre_tri = st.radio("Ordre de tri", ("Croissant", "Décroissant"))
-
-            st.markdown("**Explication:** Choisissez la colonne par laquelle vous souhaitez trier les données "
-                        "et l'ordre de tri (Croissant - Ascendant, Décroissant - Descendant).")
-
-            if ordre_tri == "Croissant":
-                ordre_tri = True
-            else:
-                ordre_tri = False
-
-            # Application des filtres et du tri
-            for colonne, valeurs in filtres.items():
-                df = df[df[colonne].isin(valeurs)]
-
-            if colonne_tri:
-                df = df.sort_values(by=colonne_tri, ascending=ordre_tri)
-
-            # Affichage des données
+            # Explication des données analysées
             st.markdown("## Données analysées")
             st.dataframe(df)
+            st.markdown(
+                """
+                **Données analysées :**
+                - `notifying_country` : Le pays ayant émis la notification.
+                - `reference` : Référence unique de chaque notification.
+                - `hazards` : (si disponible) Type de danger rapporté dans la notification.
+                - `date` : Date de la notification.
+                """
+            )
 
             # Statistiques descriptives
             st.markdown("## Statistiques descriptives")
-            st.write(df.describe())
+            st.write(df.describe(include='all'))
 
             # Analyse de tendances
             st.markdown("## Analyse de tendances")
 
             # Graphique à barres (nombre de notifications par pays)
             st.markdown("### Nombre de notifications par pays")
-            fig_pays = px.bar(df, x="notifying_country", y="reference", title="Nombre de notifications par pays")
+            fig_pays = px.bar(df, x="notifying_country", y="reference", title="Nombre de notifications par pays", labels={'reference': 'Nombre de notifications'})
             st.plotly_chart(fig_pays, use_container_width=True)
 
-            # Histogramme (distribution des dangers)
-            st.markdown("### Distribution des dangers")
-            fig_dangers = px.histogram(df, x="hazards", title="Distribution des dangers")
-            st.plotly_chart(fig_dangers, use_container_width=True)
+            # Histogramme (distribution des dangers) si applicable
+            if "hazards" in df.columns:
+                st.markdown("### Distribution des dangers")
+                fig_dangers = px.histogram(df, x="hazards", title="Distribution des dangers")
+                st.plotly_chart(fig_dangers, use_container_width=True)
 
             # Analyse de corrélation
-            st.markdown("## Analyse de corrélation")
+            if len(df.select_dtypes(include=["number"]).columns) > 1:
+                st.markdown("## Analyse de corrélation")
+                st.markdown("### Matrice de corrélation")
+                correlation_matrix = df.corr()
+                fig_correlation = px.imshow(correlation_matrix, color_continuous_scale='RdBu_r', title="Matrice de corrélation")
+                st.plotly_chart(fig_correlation, use_container_width=True)
 
-            # Matrice de corrélation
-            st.markdown("### Matrice de corrélation")
-            correlation_matrix = df.corr()
-            fig_correlation = px.imshow(correlation_matrix, color_continuous_scale='RdBu_r', title="Matrice de corrélation")
-            st.plotly_chart(fig_correlation, use_container_width=True)
-
-            # Graphique à barres (corrélation entre deux variables)
-            st.markdown("### Corrélation entre deux variables")
-            colonne_x = st.selectbox("Sélectionnez la première variable", df.columns)
-            colonne_y = st.selectbox("Sélectionnez la deuxième variable", df.columns)
-            fig_correlation_variables = px.bar(df, x=colonne_x, y=colonne_y, title=f"Corrélation entre {colonne_x} et {colonne_y}")
-            st.plotly_chart(fig_correlation_variables, use_container_width=True)
-
+                # Graphique à barres (corrélation entre deux variables)
+                st.markdown("### Corrélation entre deux variables")
+                colonne_x = st.selectbox("Sélectionnez la première variable", df.columns)
+                colonne_y = st.selectbox("Sélectionnez la deuxième variable", df.columns)
+                fig_correlation_variables = px.bar(df, x=colonne_x, y=colonne_y, title=f"Corrélation entre {colonne_x} et {colonne_y}")
+                st.plotly_chart(fig_correlation_variables, use_container_width=True)
         else:
-            st.error(f"Échec du téléchargement du fichier. Code d'état HTTP : {response.status_code}")
-    except Exception as e:
-        st.error(f"Erreur lors du téléchargement ou de l'analyse du fichier : {e}")
+            st.error("Aucune donnée disponible pour les semaines sélectionnées.")
 
 # Navigation
 page = st.sidebar.radio("Navigation", ("Accueil", "Analyse"))
