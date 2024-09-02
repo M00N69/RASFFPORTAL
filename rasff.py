@@ -15,6 +15,33 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
+def corriger_dangers(nom_danger):
+    """Corrige les erreurs de frappe dans le nom d'un danger."""
+    nom_danger = str(nom_danger)
+    dangers_standardises = [
+        "chlorpyrifos",
+        "chlorpyrifos-ethyl",
+        "Salmonella",
+        "Salmonella spp.",
+        "Salmonella Enteritidis",
+        "Aflatoxin",
+        "Aflatoxin B1",
+        "aflatoxin total",
+        "ochratoxin A",
+        "E220- sulfur dioxide", 
+        "cadmium",
+        "Listeria monocytogenes",
+        "norovirus",
+        "peanut undeclared",
+        "gluten too high content",
+        # ... ajouter d'autres dangers ici
+    ]
+    best_match = min(dangers_standardises, key=lambda x: distance(x, nom_danger))
+    if distance(best_match, nom_danger) <= 3:
+        return best_match
+    else:
+        return nom_danger
+
 def nettoyer_donnees(df):
     """Nettoie et standardise les données du DataFrame."""
     
