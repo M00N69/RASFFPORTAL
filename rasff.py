@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
-from fuzzywuzzy import fuzz, process
 import plotly.express as px
 import chardet
-from io import StringIO
+import requests
+from io import BytesIO
+import openpyxl
 from Levenshtein import distance  # Import Levenshtein for faster fuzzy matching
 
 st.set_page_config(
@@ -126,34 +127,23 @@ def page_analyse():
     """Affiche la page d'analyse."""
     st.title("Analyse des Données RASFF")
 
-    # Téléchargement du fichier CSV ou Excel
-    uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel RASFF", type=["csv", "xlsx", "xls"])
+    # Formulaire pour saisir l'année et la semaine
+    st.markdown("### Charger un fichier par année et semaine")
+    annee = st.number_input("Entrez l'année", min_value=2000, max_value=2100, value=2024)
+    semaine = st.number_input("Entrez le numéro de la semaine", min_value=1, max_value=52, value=34)
 
-    if uploaded_file is not None:
-        try:
-            # Détecter le type de fichier
-            if uploaded_file.name.endswith(".csv"):
-                # Détecter l'encodage du fichier CSV
-                encodage = chardet.detect(uploaded_file.read())['encoding']
-                uploaded_file.seek(0)  # Rembobiner le fichier
+    # Génération de l'URL à partir de l'année et de la semaine
+    url_template = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
+    url = url_template.format(str(annee)[2:], annee, str(semaine).zfill(2))
 
-                df = pd.read_csv(uploaded_file, encoding=encodage, quotechar='"')
-            elif uploaded_file.name.endswith(".xlsx"):
-                # Read the Excel file using openpyxl
-                wb = openpyxl.load_workbook(uploaded_file)
-                sheet = wb.active
+    # Téléchargement du fichier
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            st.success(f"Fichier téléchargé depuis : {url}")
+            df = pd.read_excel(BytesIO(response.content))
 
-                # Convert "reference" to string before creating DataFrame
-                data = [[str(cell.value) for cell in row] for row in sheet.iter_rows()]
-                df = pd.DataFrame(data, columns=sheet.row_values(1))
-
-                # Handle "date" column (assuming it's formatted as text in Excel)
-                df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")  
-
-            else:
-                st.error("Type de fichier non pris en charge.")
-                return
-
+            # Nettoyage et analyse des données
             df = nettoyer_donnees(df)
 
             # Options d'analyse et de tri
@@ -164,8 +154,8 @@ def page_analyse():
             df = df[colonnes_a_afficher]
 
             st.markdown("**Explication:** Choisissez les colonnes que vous souhaitez utiliser pour l'analyse. "
-                       "Il est important de choisir **notifying_country** et **reference** "
-                       "pour que le graphique 'Nombre de notifications par pays' fonctionne correctement.")
+                        "Il est important de choisir **notifying_country** et **reference** "
+                        "pour que le graphique 'Nombre de notifications par pays' fonctionne correctement.")
 
             # Filtres
             filtres = {}
@@ -176,15 +166,15 @@ def page_analyse():
                     if filtre_colonne:
                         filtres[colonne] = filtre_colonne
 
-            st.markdown("**Explication:**  Sélectionnez les valeurs spécifiques dans les colonnes "
-                       "que vous avez choisies pour filtrer les données.")
+            st.markdown("**Explication:** Sélectionnez les valeurs spécifiques dans les colonnes "
+                        "que vous avez choisies pour filtrer les données.")
 
             # Tri
             colonne_tri = st.selectbox("Trier par", df.columns)
             ordre_tri = st.radio("Ordre de tri", ("Croissant", "Décroissant"))
 
             st.markdown("**Explication:** Choisissez la colonne par laquelle vous souhaitez trier les données "
-                       "et l'ordre de tri (Croissant - Ascendant, Décroissant - Descendant).")
+                        "et l'ordre de tri (Croissant - Ascendant, Décroissant - Descendant).")
 
             if ordre_tri == "Croissant":
                 ordre_tri = True
@@ -211,8 +201,7 @@ def page_analyse():
 
             # Graphique à barres (nombre de notifications par pays)
             st.markdown("### Nombre de notifications par pays")
-            # Now, the column "notifying_country" should be available 
-            fig_pays = px.bar(df, x="notifying_country", y="reference", title="Nombre de notifications par pays") 
+            fig_pays = px.bar(df, x="notifying_country", y="reference", title="Nombre de notifications par pays")
             st.plotly_chart(fig_pays, use_container_width=True)
 
             # Histogramme (distribution des dangers)
@@ -236,8 +225,10 @@ def page_analyse():
             fig_correlation_variables = px.bar(df, x=colonne_x, y=colonne_y, title=f"Corrélation entre {colonne_x} et {colonne_y}")
             st.plotly_chart(fig_correlation_variables, use_container_width=True)
 
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du fichier : {e}")
+        else:
+            st.error(f"Échec du téléchargement du fichier. Code d'état HTTP : {response.status_code}")
+    except Exception as e:
+        st.error(f"Erreur lors du téléchargement ou de l'analyse du fichier : {e}")
 
 # Navigation
 page = st.sidebar.radio("Navigation", ("Accueil", "Analyse"))
