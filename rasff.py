@@ -17,8 +17,9 @@ st.set_page_config(
 
 def nettoyer_donnees(df):
     """Nettoie et standardise les données du DataFrame."""
+    
+    # Normaliser les noms de pays et d'origine
     def normaliser_pays(nom_pays):
-        """Normalise le nom d'un pays."""
         pays_standardises = {
             "France": "France",
             "United Kingdom": "Royaume-Uni",
@@ -39,36 +40,94 @@ def nettoyer_donnees(df):
     df["notifying_country"] = df["notifying_country"].apply(normaliser_pays)
     df["origin"] = df["origin"].apply(normaliser_pays)
 
-    def corriger_dangers(nom_danger):
-        """Corrige les erreurs de frappe dans le nom d'un danger."""
-        nom_danger = str(nom_danger)
-        dangers_standardises = [
-            "chlorpyrifos",
-            "chlorpyrifos-ethyl",
-            "Salmonella",
-            "Salmonella spp.",
-            "Salmonella Enteritidis",
-            "Aflatoxin",
-            "Aflatoxin B1",
-            "aflatoxin total",
-            "ochratoxin A",
-            "E220- sulfur dioxide", 
-            "cadmium",
-            "Listeria monocytogenes",
-            "norovirus",
-            "peanut  undeclared",
-            "gluten  too high content",
-            # ... ajouter d'autres dangers ici
-        ]
-        best_match = min(dangers_standardises, key=lambda x: distance(x, nom_danger))
-        if distance(best_match, nom_danger) <= 3:
-            return best_match
-        else:
-            return nom_danger
+    # Normaliser les catégories de produits
+    def normaliser_categories_produits(categorie_produit):
+        categories_produits_standardisees = {
+            "alcoholic beverages": "Boissons alcoolisées",
+            "animal by-products": "Sous-produits animaux",
+            "bivalve molluscs and products thereof": "Mollusques bivalves et leurs produits",
+            "cephalopods and products thereof": "Céphalopodes et leurs produits",
+            "cereals and bakery products": "Céréales et produits de boulangerie",
+            "cocoa and cocoa preparations, coffee and tea": "Cacao et préparations de cacao, café et thé",
+            "compound feeds": "Aliments composés",
+            "confectionery": "Confiserie",
+            "crustaceans and products thereof": "Crustacés et leurs produits",
+            "dietetic foods, food supplements and fortified foods": "Aliments diététiques, compléments alimentaires et aliments enrichis",
+            "eggs and egg products": "Œufs et produits à base d'œufs",
+            "fats and oils": "Graisses et huiles",
+            "feed additives": "Additifs pour l'alimentation animale",
+            "feed materials": "Matières premières pour aliments",
+            "feed premixtures": "Prémélanges pour aliments",
+            "fish and fish products": "Poissons et produits à base de poissons",
+            "food additives and flavourings": "Additifs alimentaires et arômes",
+            "food contact materials": "Matériaux en contact avec les aliments",
+            "fruits and vegetables": "Fruits et légumes",
+            "gastropods": "Gastéropodes",
+            "herbs and spices": "Herbes et épices",
+            "honey and royal jelly": "Miel et gelée royale",
+            "ices and desserts": "Glaces et desserts",
+            "live animals": "Animaux vivants",
+            "meat and meat products (other than poultry)": "Viande et produits carnés (autres que volaille)",
+            "milk and milk products": "Lait et produits laitiers",
+            "natural mineral waters": "Eaux minérales naturelles",
+            "non-alcoholic beverages": "Boissons non alcoolisées",
+            "nuts, nut products and seeds": "Noix, produits à base de noix et graines",
+            "other food product / mixed": "Autres produits alimentaires / mixtes",
+            "pet food": "Aliments pour animaux de compagnie",
+            "plant protection products": "Produits de protection des plantes",
+            "poultry meat and poultry meat products": "Viande de volaille et produits à base de viande de volaille",
+            "prepared dishes and snacks": "Plats préparés et snacks",
+            "soups, broths, sauces and condiments": "Soupes, bouillons, sauces et condiments",
+            "water for human consumption (other)": "Eau pour la consommation humaine (autres)",
+            "wine": "Vin",
+        }
+        return categories_produits_standardisees.get(categorie_produit, categorie_produit)
+    
+    df["category"] = df["category"].apply(normaliser_categories_produits)
 
+    # Normaliser les catégories de dangers
+    def normaliser_categories_dangers(categorie_danger):
+        categories_dangers_standardisees = {
+            "GMO / novel food": "OGM / nouveau aliment",
+            "TSEs": "EST",
+            "adulteration / fraud": "Adultération / fraude",
+            "allergens": "Allergènes",
+            "biological contaminants": "Contaminants biologiques",
+            "biotoxins (other)": "Biotoxines (autres)",
+            "chemical contamination (other)": "Contamination chimique (autres)",
+            "composition": "Composition",
+            "environmental pollutants": "Polluants environnementaux",
+            "feed additives": "Additifs pour l'alimentation animale",
+            "food additives and flavourings": "Additifs alimentaires et arômes",
+            "foreign bodies": "Corps étrangers",
+            "genetically modified": "Génétiquement modifié",
+            "heavy metals": "Métaux lourds",
+            "industrial contaminants": "Contaminants industriels",
+            "labelling absent/incomplete/incorrect": "Étiquetage absent/incomplet/incorrect",
+            "migration": "Migration",
+            "mycotoxins": "Mycotoxines",
+            "natural toxins (other)": "Toxines naturelles (autres)",
+            "non-pathogenic micro-organisms": "Micro-organismes non pathogènes",
+            "not determined (other)": "Non déterminé (autres)",
+            "novel food": "Nouveau aliment",
+            "organoleptic aspects": "Aspects organoleptiques",
+            "packaging defective / incorrect": "Emballage défectueux / incorrect",
+            "parasitic infestation": "Infestation parasitaire",
+            "pathogenic micro-organisms": "Micro-organismes pathogènes",
+            "pesticide residues": "Résidus de pesticides",
+            "poor or insufficient controls": "Contrôles insuffisants ou de mauvaise qualité",
+            "radiation": "Radiation",
+            "residues of veterinary medicinal": "Résidus de médicaments vétérinaires",
+        }
+        return categories_dangers_standardisees.get(categorie_danger, categorie_danger)
+    
+    df["hazards"] = df["hazards"].apply(normaliser_categories_dangers)
+
+    # Appliquer la correction des dangers avec Levenshtein
     if "hazards" in df.columns:
         df["hazards"] = df.apply(lambda row: corriger_dangers(row['hazards']), axis=1)
 
+    # Conversion des dates
     try:
         df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")
     except ValueError:
@@ -138,7 +197,7 @@ def page_analyse():
         df = telecharger_et_nettoyer_donnees(annee, semaines)
         if not df.empty:
             # Sélection automatique des colonnes nécessaires
-            colonnes_a_afficher = ['notifying_country', 'type', 'hazards', 'date'] if 'hazards' in df.columns else ['notifying_country', 'type', 'date']
+            colonnes_a_afficher = ['notifying_country', 'category', 'hazards', 'date'] if 'hazards' in df.columns else ['notifying_country', 'category', 'date']
             df = df[colonnes_a_afficher]
 
             # Explication des données analysées
@@ -148,8 +207,8 @@ def page_analyse():
                 """
                 **Données analysées :**
                 - `notifying_country` : Le pays ayant émis la notification.
-                - `type` : Le type de produit ou de matériel concerné par la notification.
-                - `hazards` : (si disponible) Type de danger rapporté dans la notification.
+                - `category` : Catégorie du produit ou matériel concerné par la notification.
+                - `hazards` : (si disponible) Catégorie du danger rapporté dans la notification.
                 - `date` : Date de la notification.
                 """
             )
