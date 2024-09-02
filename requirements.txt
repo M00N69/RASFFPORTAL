@@ -4,3 +4,5 @@ fuzzywuzzy
 plotly
 chardet
 python-Levenshtein
+requests
+openpyxl
