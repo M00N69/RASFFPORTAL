@@ -6,3 +6,5 @@ chardet
 python-Levenshtein
 requests
 openpyxl
+pandasai
+groq
