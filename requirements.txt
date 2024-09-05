@@ -1,11 +1,8 @@
 streamlit
 pandas
-fuzzywuzzy
 plotly
-chardet
 python-Levenshtein
 requests
 openpyxl
 pandasai
-groq
 pyyaml
