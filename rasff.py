@@ -5,36 +5,36 @@ import requests
 from io import BytesIO
 import datetime
 from Levenshtein import distance
-from groq import Groq  # Import the Groq client
-from pandasai import PandasAI
-from pandasai.llm import GroqLLM
+from pandasai import SmartDataframe
+from pandasai.connectors import PandasConnector
+from pandasai.llm import GoogleGemini
+from pandasai.responses.response_parser import ResponseParser
 
-# Import lists from separate files (replace these with actual data or create dummy data if missing)
+# Import lists from separate files (replace these with actual data)
 from product_categories import product_categories
 from hazards import hazards
 from hazard_categories import hazard_categories
 from notifying_countries import notifying_countries
 from origin_countries import origin_countries
 
-# Function to configure the Groq client for PandasAI
-def get_groq_client():
-    """Initialise and return a Groq client using the API key from Streamlit secrets."""
-    return Groq(api_key=st.secrets["GROQ_API_KEY"])
+# Initialisation de Google Gemini avec l'API Key
+GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 
-# Initialize PandasAI with Groq as the LLM
-groq_client = get_groq_client()
-groq_llm = GroqLLM(groq_client)  # Use GroqLLM for PandasAI
-pandas_ai = PandasAI(llm=groq_llm)
+# Custom Response Parser to handle output
+class OutputParser(ResponseParser):
+    def __init__(self, context) -> None:
+        super().__init__(context)
+    
+    def parse(self, result):
+        if result['type'] == "dataframe":
+            st.dataframe(result['value'])
+        elif result['type'] == 'plot':
+            st.image(result["value"])
+        else:
+            st.write(result['value'])
+        return
 
-# Streamlit page configuration
-st.set_page_config(
-    page_title="Analyseur RASFF",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="auto"
-)
-
-# Functions for processing data
+# Fonction de nettoyage des données
 def corriger_dangers(nom_danger):
     """Corrects typos in the name of a hazard."""
     nom_danger = str(nom_danger)
@@ -49,7 +49,7 @@ def mapper_danger_a_categorie(danger):
     for categorie, description in hazard_categories.items():
         if description.lower() in danger.lower():
             return categorie
-    return "Autre"  # If no match is found
+    return "Autre"
 
 def nettoyer_donnees(df):
     """Cleans and standardizes the data."""
@@ -57,7 +57,6 @@ def nettoyer_donnees(df):
     df["origin"] = df["origin"].apply(lambda x: x if x in origin_countries else x)
     df["category"] = df["category"].apply(lambda x: product_categories.get(x, x))
 
-    # Correct and map hazards to their categories
     if "hazards" in df.columns:
         df["hazards"] = df["hazards"].apply(corriger_dangers)
         df["hazard_category"] = df["hazards"].apply(mapper_danger_a_categorie)
@@ -69,6 +68,7 @@ def nettoyer_donnees(df):
     df = df.fillna("")
     return df
 
+# Fonction pour télécharger les données
 def telecharger_et_nettoyer_donnees(annee, semaines):
     """Downloads and combines data from multiple weeks."""
     dfs = []
@@ -90,17 +90,18 @@ def telecharger_et_nettoyer_donnees(annee, semaines):
     else:
         return pd.DataFrame()  # Return an empty DataFrame if no files could be downloaded
 
+# Fonction pour calculer des statistiques descriptives
 def calculer_statistiques_descriptives(df):
     """Calculates descriptive statistics for the number of notifications per country and type of hazard."""
     grouped = df.groupby(['notifying_country', 'hazard_category']).size().reset_index(name='Nombre de notifications')
     stats = grouped['Nombre de notifications'].describe()
     return stats, grouped
 
-# Main function for the app
+# Fonction principale de l'application
 def main():
     st.title("Analyseur de Données RASFF")
 
-    # Form to input year and weeks
+    # Formulaire pour entrer l'année et les semaines
     annee = st.number_input("Entrez l'année", min_value=2000, max_value=datetime.datetime.now().year, value=datetime.datetime.now().year)
     semaines = st.multiselect("Sélectionnez les semaines", list(range(1, min(36, datetime.datetime.now().isocalendar()[1] + 1))), default=[35])
 
@@ -109,7 +110,7 @@ def main():
         if not df.empty:
             st.dataframe(df.head())
 
-            # New feature: Filter by hazard category
+            # Filtrage par catégorie de danger
             categories_dangers_selectionnees = st.multiselect("Filtrez par catégories de dangers", df['hazard_category'].unique())
             if categories_dangers_selectionnees:
                 df = df[df['hazard_category'].isin(categories_dangers_selectionnees)]
@@ -125,32 +126,40 @@ def main():
             st.markdown("### Nombre de notifications par pays et type de danger")
             st.dataframe(grouped)
 
-            st.markdown("## Analyse de tendances")
+            # Graphique : Nombre de notifications par pays
             st.markdown("### Nombre de notifications par pays")
             fig_pays = px.bar(grouped, x="notifying_country", y="Nombre de notifications", title="Nombre de notifications par pays")
             st.plotly_chart(fig_pays, use_container_width=True)
 
-            # Distribution of hazard categories
+            # Distribution des catégories de dangers
             if "hazard_category" in df.columns:
                 st.markdown("### Distribution des catégories de dangers")
                 fig_dangers = px.histogram(grouped, x="hazard_category", y="Nombre de notifications", title="Distribution des catégories de dangers")
                 st.plotly_chart(fig_dangers, use_container_width=True)
 
-            # Integration with Groq LLM via PandasAI for natural language interaction
+            # Intégration avec Google Gemini pour l'interaction en langage naturel
             st.markdown("## Posez des questions à propos des données")
-            question = st.text_input("Posez une question en langage naturel sur les données :")
+            prompt = st.text_input("Posez une question en langage naturel sur les données :")
 
             if st.button("Analyser"):
-                if question.strip():
+                if prompt.strip():
                     try:
-                        # Use PandasAI with Groq LLM to answer user queries about the RASFF data
-                        response = pandas_ai.run(df, prompt=question)
+                        # Utilisation de Google Gemini via PandasAI pour analyser les données
+                        llm = GoogleGemini(api_key=GOOGLE_API_KEY)
+                        connector = PandasConnector({"original_df": df})
+                        sdf = SmartDataframe(connector, {"enable_cache": False}, config={"llm": llm, "response_parser": OutputParser})
+                        
+                        response = sdf.chat(prompt)
                         st.write("Réponse :")
                         st.write(response)
+
+                        # Afficher le code exécuté
+                        st.markdown("### Code exécuté par PandasAI :")
+                        st.code(sdf.last_code_executed)
                     except Exception as e:
                         st.error(f"Erreur lors de l'analyse : {e}")
                 else:
-                    st.warning("Veuillez poser une question valide.")
+                    st.warning("Veuillez entrer une question valide.")
         else:
             st.error("Aucune donnée disponible pour les semaines sélectionnées.")
 
