@@ -6,3 +6,4 @@ requests
 openpyxl
 pandasai
 pyyaml
+google-generativeai
