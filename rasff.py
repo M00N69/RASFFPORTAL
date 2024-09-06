@@ -108,58 +108,56 @@ def main():
     if semaines:
         df = telecharger_et_nettoyer_donnees(annee, semaines)
         if not df.empty:
-            st.dataframe(df.head())
+            # Créer des onglets
+            tab1, tab2, tab3, tab4 = st.tabs(["Aperçu des données", "Statistiques descriptives", "Graphiques", "Analyse IA"])
 
-            # Filtrage par catégorie de danger
-            categories_dangers_selectionnees = st.multiselect("Filtrez par catégories de dangers", df['hazard_category'].unique())
-            if categories_dangers_selectionnees:
-                df = df[df['hazard_category'].isin(categories_dangers_selectionnees)]
+            with tab1:
+                st.markdown("## Données analysées")
+                st.dataframe(df)
 
-            stats, grouped = calculer_statistiques_descriptives(df)
+            with tab2:
+                stats, grouped = calculer_statistiques_descriptives(df)
+                st.markdown("## Statistiques descriptives sur les notifications")
+                st.write(stats)
+                st.markdown("### Nombre de notifications par pays et type de danger")
+                st.dataframe(grouped)
 
-            st.markdown("## Données analysées")
-            st.dataframe(df)
+            with tab3:
+                # Graphique : Nombre de notifications par pays
+                st.markdown("### Nombre de notifications par pays")
+                fig_pays = px.bar(grouped, x="notifying_country", y="Nombre de notifications", title="Nombre de notifications par pays")
+                st.plotly_chart(fig_pays, use_container_width=True)
 
-            st.markdown("## Statistiques descriptives sur les notifications")
-            st.write(stats)
+                # Distribution des catégories de dangers
+                if "hazard_category" in df.columns:
+                    st.markdown("### Distribution des catégories de dangers")
+                    fig_dangers = px.histogram(grouped, x="hazard_category", y="Nombre de notifications", title="Distribution des catégories de dangers")
+                    st.plotly_chart(fig_dangers, use_container_width=True)
 
-            st.markdown("### Nombre de notifications par pays et type de danger")
-            st.dataframe(grouped)
+            with tab4:
+                # Intégration avec Google Gemini pour l'interaction en langage naturel
+                st.markdown("## Posez des questions à propos des données")
+                prompt = st.text_input("Posez une question en langage naturel sur les données :")
 
-            # Graphique : Nombre de notifications par pays
-            st.markdown("### Nombre de notifications par pays")
-            fig_pays = px.bar(grouped, x="notifying_country", y="Nombre de notifications", title="Nombre de notifications par pays")
-            st.plotly_chart(fig_pays, use_container_width=True)
+                if st.button("Analyser"):
+                    if prompt.strip():
+                        try:
+                            # Utilisation de Google Gemini via PandasAI pour analyser les données
+                            llm = GoogleGemini(api_key=GOOGLE_API_KEY)
+                            connector = PandasConnector({"original_df": df})
+                            sdf = SmartDataframe(connector, {"enable_cache": False}, config={"llm": llm, "response_parser": OutputParser})
+                            
+                            response = sdf.chat(prompt)
+                            st.write("Réponse :")
+                            st.write(response)
 
-            # Distribution des catégories de dangers
-            if "hazard_category" in df.columns:
-                st.markdown("### Distribution des catégories de dangers")
-                fig_dangers = px.histogram(grouped, x="hazard_category", y="Nombre de notifications", title="Distribution des catégories de dangers")
-                st.plotly_chart(fig_dangers, use_container_width=True)
-
-            # Intégration avec Google Gemini pour l'interaction en langage naturel
-            st.markdown("## Posez des questions à propos des données")
-            prompt = st.text_input("Posez une question en langage naturel sur les données :")
-
-            if st.button("Analyser"):
-                if prompt.strip():
-                    try:
-                        # Utilisation de Google Gemini via PandasAI pour analyser les données
-                        llm = GoogleGemini(api_key=GOOGLE_API_KEY)
-                        connector = PandasConnector({"original_df": df})
-                        sdf = SmartDataframe(connector, {"enable_cache": False}, config={"llm": llm, "response_parser": OutputParser})
-                        
-                        response = sdf.chat(prompt)
-                        st.write("Réponse :")
-                        st.write(response)
-
-                        # Afficher le code exécuté
-                        st.markdown("### Code exécuté par PandasAI :")
-                        st.code(sdf.last_code_executed)
-                    except Exception as e:
-                        st.error(f"Erreur lors de l'analyse : {e}")
-                else:
-                    st.warning("Veuillez entrer une question valide.")
+                            # Afficher le code exécuté
+                            st.markdown("### Code exécuté par PandasAI :")
+                            st.code(sdf.last_code_executed)
+                        except Exception as e:
+                            st.error(f"Erreur lors de l'analyse : {e}")
+                    else:
+                        st.warning("Veuillez entrer une question valide.")
         else:
             st.error("Aucune donnée disponible pour les semaines sélectionnées.")
 
