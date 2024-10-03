@@ -90,6 +90,34 @@ def telecharger_et_nettoyer_donnees(annee, semaines):
     else:
         return pd.DataFrame()  # Return an empty DataFrame if no files could be downloaded
 
+# Fonction pour récupérer la dernière semaine disponible
+def obtenir_derniere_semaine_disponible():
+    """Détermine la dernière semaine disponible."""
+    maintenant = datetime.datetime.now()
+    # Obtenir la semaine actuelle
+    annee_actuelle, semaine_actuelle, _ = maintenant.isocalendar()
+    
+    # Si c'est le début de la semaine (ex. Lundi ou Mardi), on vérifie la semaine précédente
+    if maintenant.weekday() < 3:  # Si c'est lundi ou mardi
+        semaine_actuelle -= 1
+    
+    # Vérifier si la semaine actuelle ou précédente a des données disponibles
+    for semaine in range(semaine_actuelle, 0, -1):  # Commencer par la semaine actuelle et revenir en arrière
+        url = f"https://www.sirene-diffusion.fr/regia/000-rasff/{str(annee_actuelle)[2:]}/rasff-{annee_actuelle}-{str(semaine).zfill(2)}.xls"
+        response = requests.head(url)
+        if response.status_code == 200:
+            return annee_actuelle, semaine  # On retourne la première semaine avec des données disponibles
+    
+    # Si aucune donnée pour l'année en cours, revenir à l'année précédente
+    annee_prec = annee_actuelle - 1
+    for semaine in range(52, 0, -1):  # Parcourir les semaines de l'année précédente
+        url = f"https://www.sirene-diffusion.fr/regia/000-rasff/{str(annee_prec)[2:]}/rasff-{annee_prec}-{str(semaine).zfill(2)}.xls"
+        response = requests.head(url)
+        if response.status_code == 200:
+            return annee_prec, semaine  # On retourne la première semaine avec des données de l'année précédente
+    
+    return annee_actuelle, semaine_actuelle  # Retour par défaut si aucune donnée n'est trouvée
+
 # Fonction pour calculer des statistiques descriptives
 def calculer_statistiques_descriptives(df):
     """Calculates descriptive statistics for the number of notifications per country and type of hazard."""
@@ -101,9 +129,17 @@ def calculer_statistiques_descriptives(df):
 def main():
     st.title("Analyseur de Données RASFF")
 
-    # Formulaire pour entrer l'année et les semaines
-    annee = st.number_input("Entrez l'année", min_value=2000, max_value=datetime.datetime.now().year, value=datetime.datetime.now().year)
-    semaines = st.multiselect("Sélectionnez les semaines", list(range(1, min(36, datetime.datetime.now().isocalendar()[1] + 1))), default=[35])
+    # Obtenir la dernière semaine disponible
+    annee, derniere_semaine = obtenir_derniere_semaine_disponible()
+    
+    st.write(f"Dernière semaine disponible : {derniere_semaine} de l'année {annee}")
+    
+    semaines = [derniere_semaine]  # Par défaut, sélectionner la dernière semaine disponible
+
+    # Si l'utilisateur souhaite analyser plusieurs semaines, il peut le faire
+    semaines = st.multiselect("Sélectionnez les semaines (ou laissez vide pour la dernière semaine)", 
+                              list(range(1, min(36, datetime.datetime.now().isocalendar()[1] + 1))), 
+                              default=semaines)
 
     if semaines:
         df = telecharger_et_nettoyer_donnees(annee, semaines)
@@ -169,3 +205,4 @@ if page == "Accueil":
     st.write("Utilisez cette application pour analyser les données du système RASFF (Rapid Alert System for Food and Feed).")
 elif page == "Analyse":
     main()
+
