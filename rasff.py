@@ -134,8 +134,8 @@ def main():
     
     st.write(f"Dernière semaine disponible : {derniere_semaine} de l'année {annee}")
     
-    # Créer une liste d'options pour les semaines (jusqu'à la semaine actuelle)
-    semaines_options = list(range(1, min(36, datetime.datetime.now().isocalendar()[1] + 1)))
+    # Créer une liste d'options pour les semaines (de 1 jusqu'à la dernière semaine disponible)
+    semaines_options = list(range(1, derniere_semaine + 1))
 
     # Vérifiez si la dernière semaine disponible est dans la liste des options
     if derniere_semaine not in semaines_options:
