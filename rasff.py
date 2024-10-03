@@ -134,11 +134,19 @@ def main():
     
     st.write(f"Dernière semaine disponible : {derniere_semaine} de l'année {annee}")
     
-    semaines = [derniere_semaine]  # Par défaut, sélectionner la dernière semaine disponible
+    # Créer une liste d'options pour les semaines (jusqu'à la semaine actuelle)
+    semaines_options = list(range(1, min(36, datetime.datetime.now().isocalendar()[1] + 1)))
 
-    # Si l'utilisateur souhaite analyser plusieurs semaines, il peut le faire
+    # Vérifiez si la dernière semaine disponible est dans la liste des options
+    if derniere_semaine not in semaines_options:
+        st.warning(f"La dernière semaine ({derniere_semaine}) n'est pas dans la liste des options disponibles.")
+        semaines = []  # Aucun par défaut si la semaine n'est pas disponible
+    else:
+        semaines = [derniere_semaine]  # Par défaut, sélectionner la dernière semaine disponible
+
+    # Permettre à l'utilisateur de sélectionner plusieurs semaines ou de laisser vide pour la dernière semaine
     semaines = st.multiselect("Sélectionnez les semaines (ou laissez vide pour la dernière semaine)", 
-                              list(range(1, min(36, datetime.datetime.now().isocalendar()[1] + 1))), 
+                              semaines_options, 
                               default=semaines)
 
     if semaines:
