@@ -140,7 +140,168 @@ class DataCleaner:
             st.error(f"Error during data cleaning: {str(e)}")
             return df
 
-[... rest of the original code remains unchanged ...]
+class DataFetcher:
+    """Class responsible for fetching RASFF data"""
+    
+    @staticmethod
+    async def fetch_data(url: str) -> Optional[bytes]:
+        """Asynchronously fetch data from URL with error handling"""
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            return response.content
+        except requests.RequestException as e:
+            st.warning(f"Failed to fetch data: {str(e)}")
+            return None
+
+    @staticmethod
+    async def get_latest_available_week() -> Tuple[YearType, WeekType]:
+        """Determines the latest available week with improved error handling"""
+        current_date = datetime.datetime.now()
+        current_year, current_week, _ = current_date.isocalendar()
+        
+        # Check current year
+        for week in range(current_week, 0, -1):
+            url = Config.URL_TEMPLATE.format(
+                str(current_year)[2:],
+                current_year,
+                str(week).zfill(2)
+            )
+            try:
+                response = requests.head(url, timeout=5)
+                if response.status_code == 200:
+                    return current_year, week
+            except requests.RequestException:
+                continue
+        
+        # Check previous year if needed
+        prev_year = current_year - 1
+        for week in range(Config.MAX_WEEKS, 0, -1):
+            url = Config.URL_TEMPLATE.format(
+                str(prev_year)[2:],
+                prev_year,
+                str(week).zfill(2)
+            )
+            try:
+                response = requests.head(url, timeout=5)
+                if response.status_code == 200:
+                    return prev_year, week
+            except requests.RequestException:
+                continue
+        
+        return current_year, current_week
+
+class DataAnalyzer:
+    """Class responsible for data analysis"""
+    
+    @staticmethod
+    def calculate_descriptive_stats(df: DataFrameType) -> Tuple[pd.Series, DataFrameType]:
+        """Calculates descriptive statistics with error handling"""
+        try:
+            grouped = (df.groupby(['notifying_country', 'hazard_category'])
+                      .size()
+                      .reset_index(name='notifications_count'))
+            stats = grouped['notifications_count'].describe()
+            return stats, grouped
+        except Exception as e:
+            st.error(f"Error calculating statistics: {str(e)}")
+            return pd.Series(), pd.DataFrame()
+
+class RASFFDashboard:
+    """Main dashboard class"""
+    
+    def __init__(self):
+        self.data_cleaner = DataCleaner(
+            product_categories=product_categories,
+            hazards=hazards,
+            hazard_categories=hazard_categories,
+            notifying_countries=notifying_countries,
+            origin_countries=origin_countries
+        )
+        self.data_fetcher = DataFetcher()
+        self.data_analyzer = DataAnalyzer()
+
+    def render_data_overview(self, df: DataFrameType):
+        """Renders data overview tab"""
+        st.markdown("## Données analysées")
+        st.dataframe(df)
+
+    def render_statistics(self, df: DataFrameType):
+        """Renders statistics tab"""
+        stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+        st.markdown("## Statistiques descriptives sur les notifications")
+        st.write(stats)
+        st.markdown("### Nombre de notifications par pays et type de danger")
+        st.dataframe(grouped)
+
+    def render_visualizations(self, df: DataFrameType):
+        """Renders visualization tab"""
+        stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+        
+        # Notifications by country
+        st.markdown("### Nombre de notifications par pays")
+        fig_countries = px.bar(
+            grouped,
+            x="notifying_country",
+            y="notifications_count",
+            title="Notifications par pays",
+            color="hazard_category"
+        )
+        st.plotly_chart(fig_countries, use_container_width=True)
+        
+        # Hazard categories distribution
+        if "hazard_category" in df.columns:
+            st.markdown("### Distribution des catégories de dangers")
+            fig_hazards = px.histogram(
+                grouped,
+                x="hazard_category",
+                y="notifications_count",
+                title="Distribution des catégories de dangers"
+            )
+            st.plotly_chart(fig_hazards, use_container_width=True)
+
+    async def run(self):
+        """Main application loop"""
+        st.title("Analyseur de Données RASFF")
+
+        # Get latest available week
+        year, latest_week = await self.data_fetcher.get_latest_available_week()
+        st.write(f"Dernière semaine disponible : {latest_week} de l'année {year}")
+
+        # Week selection
+        weeks_options = list(range(1, latest_week + 1))
+        selected_weeks = st.multiselect(
+            "Sélectionnez les semaines",
+            weeks_options,
+            default=[latest_week]
+        )
+
+        if selected_weeks:
+            # Fetch and process data
+            dfs = []
+            for week in selected_weeks:
+                url = Config.URL_TEMPLATE.format(str(year)[2:], year, str(week).zfill(2))
+                content = await self.data_fetcher.fetch_data(url)
+                if content:
+                    df = pd.read_excel(BytesIO(content))
+                    dfs.append(df)
+
+            if dfs:
+                # Process combined data
+                df = pd.concat(dfs, ignore_index=True)
+                df = self.data_cleaner.clean_data(df)
+
+                # Create tabs
+                tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
+                
+                with tabs[0]:
+                    self.render_data_overview(df)
+                with tabs[1]:
+                    self.render_statistics(df)
+                with tabs[2]:
+                    self.render_visualizations(df)
+            else:
+                st.error("Aucune donnée disponible pour les semaines sélectionnées.")
 
 if __name__ == "__main__":
     st.set_page_config(
