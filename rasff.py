@@ -37,6 +37,8 @@ class DataCleaner:
         return best_match if distance(best_match, hazard_name) <= Config.MAX_LEVENSHTEIN_DISTANCE else hazard_name
 
     def map_hazard_to_category(self, hazard: str) -> str:
+        if pd.isna(hazard):
+            return "Other"  # Handling missing hazard values by assigning "Other"
         for category, terms in self.hazard_categories.items():
             if any(term in hazard.lower() for term in terms.split('|')):
                 return category
