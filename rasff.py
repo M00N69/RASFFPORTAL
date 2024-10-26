@@ -5,212 +5,252 @@ import requests
 from io import BytesIO
 import datetime
 from Levenshtein import distance
-from pandasai import SmartDataframe
-from pandasai.connectors import PandasConnector
-from pandasai.llm import GoogleGemini
-from pandasai.responses.response_parser import ResponseParser
+from typing import List, Dict, Tuple, Optional
+from dataclasses import dataclass
+from functools import lru_cache
 
-# Import lists from separate files (replace these with actual data)
-from product_categories import product_categories
-from hazards import hazards
-from hazard_categories import hazard_categories
-from notifying_countries import notifying_countries
-from origin_countries import origin_countries
+# Type hints for better code organization
+DataFrameType = pd.DataFrame
+WeekType = int
+YearType = int
 
-# Initialisation de Google Gemini avec l'API Key
-GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+@dataclass
+class Config:
+    """Configuration class to store constants and settings"""
+    URL_TEMPLATE: str = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
+    MAX_LEVENSHTEIN_DISTANCE: int = 3
+    DATE_FORMAT: str = "%d-%m-%Y %H:%M:%S"
+    MAX_WEEKS: int = 52
 
-# Custom Response Parser to handle output
-class OutputParser(ResponseParser):
-    def __init__(self, context) -> None:
-        super().__init__(context)
+class DataCleaner:
+    """Class responsible for data cleaning operations"""
     
-    def parse(self, result):
-        if result['type'] == "dataframe":
-            st.dataframe(result['value'])
-        elif result['type'] == 'plot':
-            st.image(result["value"])
-        else:
-            st.write(result['value'])
-        return
+    def __init__(self, product_categories: Dict, hazards: List[str], 
+                 hazard_categories: Dict, notifying_countries: List[str], 
+                 origin_countries: List[str]):
+        self.product_categories = product_categories
+        self.hazards = hazards
+        self.hazard_categories = hazard_categories
+        self.notifying_countries = notifying_countries
+        self.origin_countries = origin_countries
 
-# Fonction de nettoyage des données
-def corriger_dangers(nom_danger):
-    """Corrects typos in the name of a hazard."""
-    nom_danger = str(nom_danger)
-    best_match = min(hazards, key=lambda x: distance(x, nom_danger))
-    if distance(best_match, nom_danger) <= 3:
-        return best_match
-    else:
-        return nom_danger
+    @lru_cache(maxsize=1000)
+    def correct_hazard(self, hazard_name: str) -> str:
+        """Corrects typos in hazard names using cached results"""
+        hazard_name = str(hazard_name)
+        best_match = min(self.hazards, key=lambda x: distance(x, hazard_name))
+        return best_match if distance(best_match, hazard_name) <= Config.MAX_LEVENSHTEIN_DISTANCE else hazard_name
 
-def mapper_danger_a_categorie(danger):
-    """Maps a hazard to its corresponding hazard category."""
-    for categorie, description in hazard_categories.items():
-        if description.lower() in danger.lower():
-            return categorie
-    return "Autre"
+    def map_hazard_to_category(self, hazard: str) -> str:
+        """Maps hazards to categories efficiently"""
+        hazard_lower = hazard.lower()
+        for category, description in self.hazard_categories.items():
+            if description.lower() in hazard_lower:
+                return category
+        return "Autre"
 
-def nettoyer_donnees(df):
-    """Cleans and standardizes the data."""
-    df["notifying_country"] = df["notifying_country"].apply(lambda x: x if x in notifying_countries else x)
-    df["origin"] = df["origin"].apply(lambda x: x if x in origin_countries else x)
-    df["category"] = df["category"].apply(lambda x: product_categories.get(x, x))
+    def clean_data(self, df: DataFrameType) -> DataFrameType:
+        """Cleans and standardizes the data with improved error handling"""
+        try:
+            # Create a copy to avoid modifying the original
+            df = df.copy()
+            
+            # Clean country data
+            df["notifying_country"] = df["notifying_country"].where(
+                df["notifying_country"].isin(self.notifying_countries), "Other")
+            df["origin"] = df["origin"].where(
+                df["origin"].isin(self.origin_countries), "Other")
+            
+            # Clean categories
+            df["category"] = df["category"].map(self.product_categories).fillna("Other")
+            
+            # Clean hazards if present
+            if "hazards" in df.columns:
+                df["hazards"] = df["hazards"].apply(self.correct_hazard)
+                df["hazard_category"] = df["hazards"].apply(self.map_hazard_to_category)
+            
+            # Convert dates
+            try:
+                df["date"] = pd.to_datetime(df["date"], format=Config.DATE_FORMAT)
+            except ValueError:
+                st.warning("Date conversion failed. Using original format.")
+            
+            return df.fillna("")
+            
+        except Exception as e:
+            st.error(f"Error during data cleaning: {str(e)}")
+            return df
 
-    if "hazards" in df.columns:
-        df["hazards"] = df["hazards"].apply(corriger_dangers)
-        df["hazard_category"] = df["hazards"].apply(mapper_danger_a_categorie)
-
-    try:
-        df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y %H:%M:%S")
-    except ValueError:
-        st.warning("Impossible de convertir la colonne 'date' en date.")
-    df = df.fillna("")
-    return df
-
-# Fonction pour télécharger les données
-def telecharger_et_nettoyer_donnees(annee, semaines):
-    """Downloads and combines data from multiple weeks."""
-    dfs = []
-    url_template = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
+class DataFetcher:
+    """Class responsible for fetching RASFF data"""
     
-    for semaine in semaines:
-        url = url_template.format(str(annee)[2:], annee, str(semaine).zfill(2))
-        response = requests.get(url)
-        if response.status_code == 200:
-            df = pd.read_excel(BytesIO(response.content))
-            dfs.append(df)
-        else:
-            st.error(f"Échec du téléchargement des données pour la semaine {semaine}.")
+    @staticmethod
+    async def fetch_data(url: str) -> Optional[bytes]:
+        """Asynchronously fetch data from URL with error handling"""
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            return response.content
+        except requests.RequestException as e:
+            st.warning(f"Failed to fetch data: {str(e)}")
+            return None
+
+    @staticmethod
+    async def get_latest_available_week() -> Tuple[YearType, WeekType]:
+        """Determines the latest available week with improved error handling"""
+        current_date = datetime.datetime.now()
+        current_year, current_week, _ = current_date.isocalendar()
+        
+        # Check current year
+        for week in range(current_week, 0, -1):
+            url = Config.URL_TEMPLATE.format(
+                str(current_year)[2:],
+                current_year,
+                str(week).zfill(2)
+            )
+            try:
+                response = requests.head(url, timeout=5)
+                if response.status_code == 200:
+                    return current_year, week
+            except requests.RequestException:
+                continue
+        
+        # Check previous year if needed
+        prev_year = current_year - 1
+        for week in range(Config.MAX_WEEKS, 0, -1):
+            url = Config.URL_TEMPLATE.format(
+                str(prev_year)[2:],
+                prev_year,
+                str(week).zfill(2)
+            )
+            try:
+                response = requests.head(url, timeout=5)
+                if response.status_code == 200:
+                    return prev_year, week
+            except requests.RequestException:
+                continue
+        
+        return current_year, current_week
+
+class DataAnalyzer:
+    """Class responsible for data analysis"""
     
-    if dfs:
-        df = pd.concat(dfs, ignore_index=True)
-        df = nettoyer_donnees(df)
-        return df
-    else:
-        return pd.DataFrame()  # Return an empty DataFrame if no files could be downloaded
+    @staticmethod
+    def calculate_descriptive_stats(df: DataFrameType) -> Tuple[pd.Series, DataFrameType]:
+        """Calculates descriptive statistics with error handling"""
+        try:
+            grouped = (df.groupby(['notifying_country', 'hazard_category'])
+                      .size()
+                      .reset_index(name='notifications_count'))
+            stats = grouped['notifications_count'].describe()
+            return stats, grouped
+        except Exception as e:
+            st.error(f"Error calculating statistics: {str(e)}")
+            return pd.Series(), pd.DataFrame()
 
-# Fonction pour récupérer la dernière semaine disponible
-def obtenir_derniere_semaine_disponible():
-    """Détermine la dernière semaine disponible."""
-    maintenant = datetime.datetime.now()
-    # Obtenir la semaine actuelle
-    annee_actuelle, semaine_actuelle, _ = maintenant.isocalendar()
+class RASFFDashboard:
+    """Main dashboard class"""
     
-    # Si c'est le début de la semaine (ex. Lundi ou Mardi), on vérifie la semaine précédente
-    if maintenant.weekday() < 3:  # Si c'est lundi ou mardi
-        semaine_actuelle -= 1
+    def __init__(self):
+        self.data_cleaner = DataCleaner(
+            product_categories=product_categories,
+            hazards=hazards,
+            hazard_categories=hazard_categories,
+            notifying_countries=notifying_countries,
+            origin_countries=origin_countries
+        )
+        self.data_fetcher = DataFetcher()
+        self.data_analyzer = DataAnalyzer()
+
+    def render_data_overview(self, df: DataFrameType):
+        """Renders data overview tab"""
+        st.markdown("## Données analysées")
+        st.dataframe(df)
+
+    def render_statistics(self, df: DataFrameType):
+        """Renders statistics tab"""
+        stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+        st.markdown("## Statistiques descriptives sur les notifications")
+        st.write(stats)
+        st.markdown("### Nombre de notifications par pays et type de danger")
+        st.dataframe(grouped)
+
+    def render_visualizations(self, df: DataFrameType):
+        """Renders visualization tab"""
+        stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+        
+        # Notifications by country
+        st.markdown("### Nombre de notifications par pays")
+        fig_countries = px.bar(
+            grouped,
+            x="notifying_country",
+            y="notifications_count",
+            title="Notifications par pays",
+            color="hazard_category"
+        )
+        st.plotly_chart(fig_countries, use_container_width=True)
+        
+        # Hazard categories distribution
+        if "hazard_category" in df.columns:
+            st.markdown("### Distribution des catégories de dangers")
+            fig_hazards = px.histogram(
+                grouped,
+                x="hazard_category",
+                y="notifications_count",
+                title="Distribution des catégories de dangers"
+            )
+            st.plotly_chart(fig_hazards, use_container_width=True)
+
+    async def run(self):
+        """Main application loop"""
+        st.title("Analyseur de Données RASFF")
+
+        # Get latest available week
+        year, latest_week = await self.data_fetcher.get_latest_available_week()
+        st.write(f"Dernière semaine disponible : {latest_week} de l'année {year}")
+
+        # Week selection
+        weeks_options = list(range(1, latest_week + 1))
+        selected_weeks = st.multiselect(
+            "Sélectionnez les semaines",
+            weeks_options,
+            default=[latest_week]
+        )
+
+        if selected_weeks:
+            # Fetch and process data
+            dfs = []
+            for week in selected_weeks:
+                url = Config.URL_TEMPLATE.format(str(year)[2:], year, str(week).zfill(2))
+                content = await self.data_fetcher.fetch_data(url)
+                if content:
+                    df = pd.read_excel(BytesIO(content))
+                    dfs.append(df)
+
+            if dfs:
+                # Process combined data
+                df = pd.concat(dfs, ignore_index=True)
+                df = self.data_cleaner.clean_data(df)
+
+                # Create tabs
+                tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
+                
+                with tabs[0]:
+                    self.render_data_overview(df)
+                with tabs[1]:
+                    self.render_statistics(df)
+                with tabs[2]:
+                    self.render_visualizations(df)
+            else:
+                st.error("Aucune donnée disponible pour les semaines sélectionnées.")
+
+if __name__ == "__main__":
+    dashboard = RASFFDashboard()
+    st.set_page_config(
+        page_title="RASFF Analyzer",
+        page_icon="📊",
+        layout="wide"
+    )
     
-    # Vérifier si la semaine actuelle ou précédente a des données disponibles
-    for semaine in range(semaine_actuelle, 0, -1):  # Commencer par la semaine actuelle et revenir en arrière
-        url = f"https://www.sirene-diffusion.fr/regia/000-rasff/{str(annee_actuelle)[2:]}/rasff-{annee_actuelle}-{str(semaine).zfill(2)}.xls"
-        response = requests.head(url)
-        if response.status_code == 200:
-            return annee_actuelle, semaine  # On retourne la première semaine avec des données disponibles
-    
-    # Si aucune donnée pour l'année en cours, revenir à l'année précédente
-    annee_prec = annee_actuelle - 1
-    for semaine in range(52, 0, -1):  # Parcourir les semaines de l'année précédente
-        url = f"https://www.sirene-diffusion.fr/regia/000-rasff/{str(annee_prec)[2:]}/rasff-{annee_prec}-{str(semaine).zfill(2)}.xls"
-        response = requests.head(url)
-        if response.status_code == 200:
-            return annee_prec, semaine  # On retourne la première semaine avec des données de l'année précédente
-    
-    return annee_actuelle, semaine_actuelle  # Retour par défaut si aucune donnée n'est trouvée
-
-# Fonction pour calculer des statistiques descriptives
-def calculer_statistiques_descriptives(df):
-    """Calculates descriptive statistics for the number of notifications per country and type of hazard."""
-    grouped = df.groupby(['notifying_country', 'hazard_category']).size().reset_index(name='Nombre de notifications')
-    stats = grouped['Nombre de notifications'].describe()
-    return stats, grouped
-
-# Fonction principale de l'application
-def main():
-    st.title("Analyseur de Données RASFF")
-
-    # Obtenir la dernière semaine disponible
-    annee, derniere_semaine = obtenir_derniere_semaine_disponible()
-    
-    st.write(f"Dernière semaine disponible : {derniere_semaine} de l'année {annee}")
-    
-    # Créer une liste d'options pour les semaines (de 1 jusqu'à la dernière semaine disponible)
-    semaines_options = list(range(1, derniere_semaine + 1))
-
-    # Vérifiez si la dernière semaine disponible est dans la liste des options
-    if derniere_semaine not in semaines_options:
-        st.warning(f"La dernière semaine ({derniere_semaine}) n'est pas dans la liste des options disponibles.")
-        semaines = []  # Aucun par défaut si la semaine n'est pas disponible
-    else:
-        semaines = [derniere_semaine]  # Par défaut, sélectionner la dernière semaine disponible
-
-    # Permettre à l'utilisateur de sélectionner plusieurs semaines ou de laisser vide pour la dernière semaine
-    semaines = st.multiselect("Sélectionnez les semaines (ou laissez vide pour la dernière semaine)", 
-                              semaines_options, 
-                              default=semaines)
-
-    if semaines:
-        df = telecharger_et_nettoyer_donnees(annee, semaines)
-        if not df.empty:
-            # Créer des onglets
-            tab1, tab2, tab3, tab4 = st.tabs(["Aperçu des données", "Statistiques descriptives", "Graphiques", "Analyse IA"])
-
-            with tab1:
-                st.markdown("## Données analysées")
-                st.dataframe(df)
-
-            with tab2:
-                stats, grouped = calculer_statistiques_descriptives(df)
-                st.markdown("## Statistiques descriptives sur les notifications")
-                st.write(stats)
-                st.markdown("### Nombre de notifications par pays et type de danger")
-                st.dataframe(grouped)
-
-            with tab3:
-                # Graphique : Nombre de notifications par pays
-                st.markdown("### Nombre de notifications par pays")
-                fig_pays = px.bar(grouped, x="notifying_country", y="Nombre de notifications", title="Nombre de notifications par pays")
-                st.plotly_chart(fig_pays, use_container_width=True)
-
-                # Distribution des catégories de dangers
-                if "hazard_category" in df.columns:
-                    st.markdown("### Distribution des catégories de dangers")
-                    fig_dangers = px.histogram(grouped, x="hazard_category", y="Nombre de notifications", title="Distribution des catégories de dangers")
-                    st.plotly_chart(fig_dangers, use_container_width=True)
-
-            with tab4:
-                # Intégration avec Google Gemini pour l'interaction en langage naturel
-                st.markdown("## Posez des questions à propos des données")
-                prompt = st.text_input("Posez une question en langage naturel sur les données :")
-
-                if st.button("Analyser"):
-                    if prompt.strip():
-                        try:
-                            # Utilisation de Google Gemini via PandasAI pour analyser les données
-                            llm = GoogleGemini(api_key=GOOGLE_API_KEY)
-                            connector = PandasConnector({"original_df": df})
-                            sdf = SmartDataframe(connector, {"enable_cache": False}, config={"llm": llm, "response_parser": OutputParser})
-                            
-                            response = sdf.chat(prompt)
-                            st.write("Réponse :")
-                            st.write(response)
-
-                            # Afficher le code exécuté
-                            st.markdown("### Code exécuté par PandasAI :")
-                            st.code(sdf.last_code_executed)
-                        except Exception as e:
-                            st.error(f"Erreur lors de l'analyse : {e}")
-                    else:
-                        st.warning("Veuillez entrer une question valide.")
-        else:
-            st.error("Aucune donnée disponible pour les semaines sélectionnées.")
-
-# Navigation
-page = st.sidebar.radio("Navigation", ("Accueil", "Analyse"))
-
-if page == "Accueil":
-    st.title("Bienvenue dans l'Analyseur RASFF")
-    st.write("Utilisez cette application pour analyser les données du système RASFF (Rapid Alert System for Food and Feed).")
-elif page == "Analyse":
-    main()
-
+    import asyncio
+    asyncio.run(dashboard.run())
