@@ -17,48 +17,52 @@ class Config:
     DATE_FORMAT: str = "%Y-%m-%dT%H:%M:%S.%f"
     MAX_WEEKS: int = 52
 
-# Data cleaning and transformation class
+# Function to load external lists from GitHub
+def load_external_list(url: str) -> list:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return eval(response.text)  # Assume the format is a Python list
+    except Exception as e:
+        st.error(f"Failed to load data from {url}: {str(e)}")
+        return []
+
+# Loading lists from GitHub repositories
+notifying_countries = load_external_list("https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/notifying_countries.py")
+hazard_categories = load_external_list("https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/hazard_categories.py")
+origin_countries = load_external_list("https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/origin_countries.py")
+
+# DataCleaner with hazard correction and mapping
 class DataCleaner:
     def __init__(self):
-        self.hazard_categories = {
-            "Chemical": "chemical contamination|pesticide|heavy metal|mycotoxin",
-            "Biological": "pathogenic|microorganism",
-            "Physical": "foreign body|packaging defective",
-            "Allergens": "allergen",
-            "Controls": "control|insufficient|poor",
-            "Labelling": "label|marking",
-            "Quality": "organoleptic|composition"
-        }
-        self.hazards = []  # Will be set dynamically
+        # Hazard categories and terms for categorization
+        self.hazard_categories = {hc: desc for hc, desc in hazard_categories}
+        self.hazards = []  # Dynamically populated from data
 
     @lru_cache(maxsize=1000)
     def correct_hazard(self, hazard_name: str) -> str:
         best_match = min(self.hazards, key=lambda x: distance(x, hazard_name))
         return best_match if distance(best_match, hazard_name) <= Config.MAX_LEVENSHTEIN_DISTANCE else hazard_name
 
-    def map_hazard_to_category(self, hazard: str) -> str:
-        if pd.isna(hazard):
-            return "Other"  # Handling missing hazard values by assigning "Other"
+    def map_hazard_to_category(self, hazard: Optional[str]) -> str:
+        if not isinstance(hazard, str):  
+            return "Other"
         for category, terms in self.hazard_categories.items():
             if any(term in hazard.lower() for term in terms.split('|')):
                 return category
         return "Other"
 
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        if "hazards" in df.columns:
-            self.hazards = df["hazards"].dropna().unique().tolist()  # Set hazards list
-            df["hazards"] = df["hazards"].apply(lambda h: self.correct_hazard(h) if pd.notna(h) else h)
-            df["hazard_category"] = df["hazards"].apply(self.map_hazard_to_category)
-        
-        # Date conversion with error handling
-        try:
-            df["date"] = pd.to_datetime(df["date"], errors='coerce', format=Config.DATE_FORMAT)
-        except Exception as e:
-            st.warning(f"Error parsing dates: {str(e)}")
+        self.hazards = df["hazards"].dropna().unique().tolist()
+        df["hazards"] = df["hazards"].apply(lambda h: self.correct_hazard(h) if pd.notna(h) else h)
+        df["hazard_category"] = df["hazards"].apply(self.map_hazard_to_category)
+        df["notifying_country"] = df["notifying_country"].where(df["notifying_country"].isin(notifying_countries), "Other")
+        df["origin"] = df["origin"].where(df["origin"].isin(origin_countries), "Other")
+        df["date"] = pd.to_datetime(df["date"], errors='coerce', format=Config.DATE_FORMAT)
         
         return df.fillna("")
 
-# Data fetching class with URL loading logic
+# DataFetcher for downloading RASFF data by week
 class DataFetcher:
     @staticmethod
     async def fetch_data(url: str) -> Optional[bytes]:
@@ -81,7 +85,7 @@ class DataFetcher:
                 dfs.append(df)
         return dfs
 
-# Data analysis class
+# DataAnalyzer for generating statistics and summaries
 class DataAnalyzer:
     @staticmethod
     def calculate_descriptive_stats(df: pd.DataFrame) -> Tuple[pd.Series, pd.DataFrame]:
@@ -93,7 +97,7 @@ class DataAnalyzer:
             st.error(f"Statistics error: {str(e)}")
             return pd.Series(), pd.DataFrame()
 
-# Main dashboard class
+# Main Dashboard class
 class RASFFDashboard:
     def __init__(self):
         self.data_cleaner = DataCleaner()
@@ -111,11 +115,11 @@ class RASFFDashboard:
         st.dataframe(grouped)
 
     def render_visualizations(self, df: pd.DataFrame):
-        st.markdown("### Notifications by Country")
-        fig_countries = px.bar(df, x="notifying_country", y="notifications_count", title="Notifications by Country", color="hazard_category")
-        st.plotly_chart(fig_countries, use_container_width=True)
+        if "notifying_country" in df.columns and "hazard_category" in df.columns:
+            st.markdown("### Notifications by Country")
+            fig_countries = px.bar(df, x="notifying_country", y="notifications_count", title="Notifications by Country", color="hazard_category")
+            st.plotly_chart(fig_countries, use_container_width=True)
 
-        if "hazard_category" in df.columns:
             st.markdown("### Hazard Category Distribution")
             fig_hazards = px.histogram(df, x="hazard_category", title="Hazard Category Distribution")
             st.plotly_chart(fig_hazards, use_container_width=True)
@@ -154,4 +158,3 @@ if __name__ == "__main__":
     dashboard = RASFFDashboard()
     import asyncio
     asyncio.run(dashboard.run())
-
