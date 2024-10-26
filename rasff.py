@@ -29,10 +29,11 @@ class DataCleaner:
             "Labelling": "label|marking",
             "Quality": "organoleptic|composition"
         }
+        self.hazards = []  # Will be set dynamically
 
     @lru_cache(maxsize=1000)
-    def correct_hazard(self, hazard_name: str, hazards: List[str]) -> str:
-        best_match = min(hazards, key=lambda x: distance(x, hazard_name))
+    def correct_hazard(self, hazard_name: str) -> str:
+        best_match = min(self.hazards, key=lambda x: distance(x, hazard_name))
         return best_match if distance(best_match, hazard_name) <= Config.MAX_LEVENSHTEIN_DISTANCE else hazard_name
 
     def map_hazard_to_category(self, hazard: str) -> str:
@@ -41,11 +42,10 @@ class DataCleaner:
                 return category
         return "Other"
 
-    def clean_data(self, df: pd.DataFrame, hazards: List[str]) -> pd.DataFrame:
-        df = df.copy()
-        # Standardize hazard names and categorize
+    def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         if "hazards" in df.columns:
-            df["hazards"] = df["hazards"].apply(lambda h: self.correct_hazard(h, hazards))
+            self.hazards = df["hazards"].dropna().unique().tolist()  # Set hazards list
+            df["hazards"] = df["hazards"].apply(lambda h: self.correct_hazard(h) if pd.notna(h) else h)
             df["hazard_category"] = df["hazards"].apply(self.map_hazard_to_category)
         
         # Date conversion with error handling
@@ -132,8 +132,7 @@ class RASFFDashboard:
 
         if dfs:
             df = pd.concat(dfs, ignore_index=True)
-            hazards = df["hazards"].unique().tolist()
-            df = self.data_cleaner.clean_data(df, hazards)
+            df = self.data_cleaner.clean_data(df)
             
             # Create tabs
             tabs = st.tabs(["Overview", "Statistics", "Visualizations"])
