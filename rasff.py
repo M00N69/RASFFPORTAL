@@ -55,13 +55,16 @@ class DataCleaner:
 class DataFetcher:
     @staticmethod
     async def fetch_data(url: str) -> Optional[bytes]:
+        """Retrieve data from a URL asynchronously and handle errors."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(url, timeout=10)
                 response.raise_for_status()
                 return response.content
             except httpx.RequestError as e:
-                st.warning(f"Échec de la récupération des données depuis {url}: {e}")
+                st.warning(f"Échec de la connexion au serveur pour {url}: {e}")
+            except httpx.HTTPStatusError as e:
+                st.warning(f"Erreur HTTP {e.response.status_code} pour {url}: {e}")
         return None
 
     @staticmethod
@@ -69,10 +72,13 @@ class DataFetcher:
         dfs = []
         for week in weeks:
             url = Config.URL_TEMPLATE.format(str(year)[2:], year, str(week).zfill(2))
+            print(f"Fetching data from: {url}")  # Optional: log each URL for debugging
             content = await DataFetcher.fetch_data(url)
             if content:
                 df = pd.read_excel(BytesIO(content))
                 dfs.append(df)
+            else:
+                st.warning(f"Données indisponibles pour l'URL : {url}")
         return dfs
 
 # Classe DataAnalyzer pour générer des statistiques descriptives
