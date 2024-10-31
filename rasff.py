@@ -157,7 +157,7 @@ class DataAnalyzer:
     def calculate_descriptive_stats(df: pd.DataFrame) -> Tuple[pd.Series, pd.DataFrame]:
         """Calculate and return descriptive statistics on the data."""
         try:
-            grouped = df.groupby(['notifying_country', 'hazard_category']).size().reset_index(name='notifications_count')
+            grouped = df.groupby(['category', 'issue_type']).size().reset_index(name='notifications_count')
             stats = grouped['notifications_count'].describe()
             return stats, grouped
         except Exception as e:
@@ -180,22 +180,24 @@ class RASFFDashboard:
         stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
         st.markdown("## Statistiques descriptives des notifications")
         st.write(stats)
-        st.markdown("### Nombre de notifications par pays et type de danger")
+        st.markdown("### Nombre de notifications par type de produit et type de problème")
         st.dataframe(grouped)
 
     def render_visualizations(self, df: pd.DataFrame):
         """Generate bar and histogram visualizations of the data."""
-        if {"notifying_country", "hazard_category", "notifications_count"}.issubset(df.columns):
-            st.markdown("### Notifications par pays")
-            fig_countries = px.bar(
-                df, x="notifying_country", y="notifications_count", 
-                color="hazard_category", title="Notifications par pays"
+        if {"category", "issue_type", "notifications_count"}.issubset(df.columns):
+            # Bar chart of notifications by product type
+            st.markdown("### Notifications par type de produit")
+            fig_categories = px.bar(
+                df, x="category", y="notifications_count", 
+                color="issue_type", title="Notifications par type de produit"
             )
-            st.plotly_chart(fig_countries, use_container_width=True)
+            st.plotly_chart(fig_categories, use_container_width=True)
 
-            st.markdown("### Distribution des catégories de danger")
-            fig_hazards = px.histogram(df, x="hazard_category", title="Distribution des catégories de danger")
-            st.plotly_chart(fig_hazards, use_container_width=True)
+            # Pie chart for issue type distribution
+            st.markdown("### Distribution des types de problèmes")
+            fig_issues = px.pie(df, names="issue_type", values="notifications_count", title="Répartition des types de problèmes")
+            st.plotly_chart(fig_issues, use_container_width=True)
         else:
             st.warning("Les colonnes de données nécessaires pour les visualisations sont manquantes.")
 
@@ -220,6 +222,10 @@ class RASFFDashboard:
             df = self.standardizer.clean_data(df)  # Standardize data
             df = self.data_cleaner.clean_data(df)  # Further clean hazards
             
+            # Classify and calculate statistics
+            df['issue_type'] = df.apply(lambda row: classify_issue(row['subject'], row['hazards']), axis=1)
+            stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+            
             # Display data in structured tabs
             tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
             
@@ -228,7 +234,7 @@ class RASFFDashboard:
             with tabs[1]:
                 self.render_statistics(df)
             with tabs[2]:
-                self.render_visualizations(df)
+                self.render_visualizations(grouped)
         else:
             st.error("Aucune donnée disponible pour les semaines sélectionnées.")
 
