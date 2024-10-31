@@ -139,7 +139,6 @@ class DataAnalyzer:
         except Exception as e:
             st.error(f"Erreur de calcul des statistiques : {e}")
             return pd.Series(), pd.DataFrame()
-
 # Classe principale RASFFDashboard pour gérer l'interface utilisateur
 class RASFFDashboard:
     def __init__(self):
@@ -161,4 +160,34 @@ class RASFFDashboard:
     def render_visualizations(self, df: pd.DataFrame):
         if {"notifying_country", "hazard_category", "notifications_count"}.issubset(df.columns):
             st.markdown("### Notifications par pays")
-            fig_cou
+            fig_countries = px.bar(
+                df, x="notifying_country", y="notifications_count", 
+                color="hazard_category", title="Notifications par pays"
+            )
+            st.plotly_chart(fig_countries, use_container_width=True)
+
+            st.markdown("### Distribution des catégories de danger")
+            fig_hazards = px.histogram(df, x="hazard_category", title="Distribution des catégories de danger")
+            st.plotly_chart(fig_hazards, use_container_width=True)
+        else:
+            st.warning("Les colonnes de données nécessaires pour les visualisations sont manquantes.")
+
+    async def run(self):
+        st.title("Analyseur de données RASFF")
+        
+        # Sélection de la plage de dates
+        start_date = st.date_input("Date de début", datetime.date.today() - datetime.timedelta(weeks=8))
+        end_date = st.date_input("Date de fin", datetime.date.today())
+        selected_weeks = [start_date.isocalendar()[1] + i for i in range((end_date - start_date).days // 7 + 1)]
+        
+        # Chargement et nettoyage des données
+        current_year = start_date.year
+        dfs = await DataFetcher.get_data_by_weeks(current_year, selected_weeks)
+
+        if dfs:
+            df = pd.concat(dfs, ignore_index=True)
+            df = self.standardizer.clean_data(df)  # Standardize data
+            df = self.data_cleaner.clean_data(df)  # Further clean hazards
+            
+            # Affichage structuré des données dans des onglets
+            tabs = st.tabs(["
