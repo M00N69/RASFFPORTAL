@@ -190,4 +190,19 @@ class RASFFDashboard:
             df = self.data_cleaner.clean_data(df)  # Further clean hazards
             
             # Affichage structuré des données dans des onglets
-            tabs = st.tabs(["
+            tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
+            
+            with tabs[0]:
+                self.render_data_overview(df)
+            with tabs[1]:
+                self.render_statistics(df)
+            with tabs[2]:
+                self.render_visualizations(df)
+        else:
+            st.error("Aucune donnée disponible pour les semaines sélectionnées.")
+
+# Exécution de l'application Streamlit
+if __name__ == "__main__":
+    dashboard = RASFFDashboard()
+    import asyncio
+    asyncio.run(dashboard.run())
