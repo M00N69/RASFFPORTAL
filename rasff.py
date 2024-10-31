@@ -1,4 +1,6 @@
 import streamlit as st
+st.set_page_config(page_title="Analyseur RASFF", page_icon="📊", layout="wide")
+
 import pandas as pd
 import plotly.express as px
 import httpx
@@ -8,7 +10,11 @@ from typing import List, Optional, Tuple
 from Levenshtein import distance
 from dataclasses import dataclass
 from functools import lru_cache
-import json
+
+# Import des fichiers locaux comme modules
+from hazard_categories import hazard_categories
+from notifying_countries import notifying_countries
+from origin_countries import origin_countries
 
 # Configuration des constantes avec un modèle de données
 @dataclass
@@ -16,27 +22,10 @@ class Config:
     URL_TEMPLATE: str = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
     MAX_LEVENSHTEIN_DISTANCE: int = 3
     DATE_FORMAT: str = "%Y-%m-%dT%H:%M:%S.%f"
-
-# Fonction pour charger des listes externes de manière sécurisée
-def load_external_list(url: str) -> List[str]:
-    try:
-        response = httpx.get(url)
-        response.raise_for_status()
-        return json.loads(response.text)  # Assumes que les fichiers GitHub sont en format JSON
-    except json.JSONDecodeError as e:
-        st.error(f"Erreur de décodage JSON pour les données de {url}: {e}")
-    except Exception as e:
-        st.error(f"Échec du chargement des données depuis {url}: {e}")
-    return []
-
-# Chargement des listes de données depuis GitHub
-notifying_countries = load_external_list("https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/notifying_countries.json")
-hazard_categories = load_external_list("https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/hazard_categories.json")
-origin_countries = load_external_list("https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/origin_countries.json")
 # Classe DataCleaner pour corriger et mapper les dangers (hazards)
 class DataCleaner:
-    def __init__(self, hazard_categories: List[List[str]]):
-        self.hazard_categories = {hc[0]: hc[1] for hc in hazard_categories}
+    def __init__(self, hazard_categories: dict):
+        self.hazard_categories = hazard_categories
         self.hazards = []
 
     @lru_cache(maxsize=1000)
@@ -159,7 +148,7 @@ class RASFFDashboard:
 
 # Exécution de l'application Streamlit
 if __name__ == "__main__":
-    st.set_page_config(page_title="Analyseur RASFF", page_icon="📊", layout="wide")
     dashboard = RASFFDashboard()
     import asyncio
     asyncio.run(dashboard.run())
+
