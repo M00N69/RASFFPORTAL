@@ -22,6 +22,53 @@ class Config:
     URL_TEMPLATE: str = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
     MAX_LEVENSHTEIN_DISTANCE: int = 3
     DATE_FORMAT: str = "%Y-%m-%dT%H:%M:%S.%f"
+class DataStandardizer:
+    def __init__(self, notifying_countries: List[str], origin_countries: List[str]):
+        self.notifying_countries = notifying_countries
+        self.origin_countries = origin_countries
+    
+    def standardize_country(self, country: str) -> str:
+        return country if country in self.notifying_countries else "Other"
+    
+    def standardize_date(self, date):
+        if pd.isna(date):
+            return pd.NaT
+        try:
+            return pd.to_datetime(date, errors='coerce')
+        except:
+            return pd.NaT
+    
+    def split_and_standardize_multivalue(self, value: str) -> List[str]:
+        if pd.isna(value):
+            return ["Unknown"]
+        return [item.strip() for item in value.split(',')]
+    
+    def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.drop(columns=['Unnamed: 0'], errors='ignore')  # Drop unnecessary columns
+        
+        # Standardize country columns
+        df['notifying_country'] = df['notifying_country'].apply(self.standardize_country)
+        df['origin'] = df['origin'].apply(self.standardize_country)
+        
+        # Parse date
+        df['date'] = df['date'].apply(self.standardize_date)
+        
+        # Split and standardize multivalued columns
+        multivalue_columns = ['distribution', 'forAttention', 'forFollowUp', 'operator']
+        for col in multivalue_columns:
+            df[col] = df[col].apply(self.split_and_standardize_multivalue)
+        
+        # Fill missing hazard and hazard_category
+        df['hazards'].fillna("Unknown", inplace=True)
+        df['hazard_category'].fillna("Other", inplace=True)
+        
+        # Convert to lowercase for consistency
+        df['category'] = df['category'].str.lower()
+        df['type'] = df['type'].str.lower()
+        df['classification'] = df['classification'].str.lower()
+        df['risk_decision'] = df['risk_decision'].str.lower()
+        
+        return df
 # Classe DataCleaner pour corriger et mapper les dangers (hazards)
 class DataCleaner:
     def __init__(self, hazard_categories: dict):
@@ -72,7 +119,7 @@ class DataFetcher:
         dfs = []
         for week in weeks:
             url = Config.URL_TEMPLATE.format(str(year)[2:], year, str(week).zfill(2))
-            print(f"Fetching data from: {url}")  # Optional: log each URL for debugging
+            print(f"Fetching data from: {url}")
             content = await DataFetcher.fetch_data(url)
             if content:
                 df = pd.read_excel(BytesIO(content))
@@ -92,11 +139,13 @@ class DataAnalyzer:
         except Exception as e:
             st.error(f"Erreur de calcul des statistiques : {e}")
             return pd.Series(), pd.DataFrame()
+
 # Classe principale RASFFDashboard pour gérer l'interface utilisateur
 class RASFFDashboard:
     def __init__(self):
         self.data_cleaner = DataCleaner(hazard_categories)
         self.data_analyzer = DataAnalyzer()
+        self.standardizer = DataStandardizer(notifying_countries, origin_countries)
 
     def render_data_overview(self, df: pd.DataFrame):
         st.markdown("## Aperçu des données")
@@ -138,7 +187,8 @@ class RASFFDashboard:
 
         if dfs:
             df = pd.concat(dfs, ignore_index=True)
-            df = self.data_cleaner.clean_data(df)
+            df = self.standardizer.clean_data(df)  # Standardize data
+            df = self.data_cleaner.clean_data(df)  # Further clean hazards
             
             # Affichage structuré des données dans des onglets
             tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
