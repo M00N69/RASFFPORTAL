@@ -28,9 +28,11 @@ class DataStandardizer:
         self.origin_countries = origin_countries
     
     def standardize_country(self, country: str) -> str:
+        """Standardize country names based on a predefined list, marking unknown countries as 'Other'."""
         return country if country in self.notifying_countries else "Other"
     
     def standardize_date(self, date):
+        """Convert date strings to datetime format, handling missing values gracefully."""
         if pd.isna(date):
             return pd.NaT
         try:
@@ -39,34 +41,41 @@ class DataStandardizer:
             return pd.NaT
     
     def split_and_standardize_multivalue(self, value: str) -> List[str]:
+        """Split multivalue fields (comma-separated) into lists and handle missing values."""
         if pd.isna(value):
             return ["Unknown"]
         return [item.strip() for item in value.split(',')]
     
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply data standardization steps across multiple columns."""
         df = df.drop(columns=['Unnamed: 0'], errors='ignore')  # Drop unnecessary columns
         
-        # Standardize country columns
-        df['notifying_country'] = df['notifying_country'].apply(self.standardize_country)
-        df['origin'] = df['origin'].apply(self.standardize_country)
+        # Standardize country columns if they exist
+        if 'notifying_country' in df.columns:
+            df['notifying_country'] = df['notifying_country'].apply(self.standardize_country)
+        if 'origin' in df.columns:
+            df['origin'] = df['origin'].apply(self.standardize_country)
         
-        # Parse date
-        df['date'] = df['date'].apply(self.standardize_date)
+        # Parse date if it exists
+        if 'date' in df.columns:
+            df['date'] = df['date'].apply(self.standardize_date)
         
-        # Split and standardize multivalued columns
+        # Split and standardize multivalued columns if they exist
         multivalue_columns = ['distribution', 'forAttention', 'forFollowUp', 'operator']
         for col in multivalue_columns:
-            df[col] = df[col].apply(self.split_and_standardize_multivalue)
+            if col in df.columns:
+                df[col] = df[col].apply(self.split_and_standardize_multivalue)
         
-        # Fill missing hazard and hazard_category
-        df['hazards'].fillna("Unknown", inplace=True)
-        df['hazard_category'].fillna("Other", inplace=True)
+        # Fill missing values in hazards and hazard_category if they exist
+        if 'hazards' in df.columns:
+            df['hazards'].fillna("Unknown", inplace=True)
+        if 'hazard_category' in df.columns:
+            df['hazard_category'].fillna("Other", inplace=True)
         
-        # Convert to lowercase for consistency
-        df['category'] = df['category'].str.lower()
-        df['type'] = df['type'].str.lower()
-        df['classification'] = df['classification'].str.lower()
-        df['risk_decision'] = df['risk_decision'].str.lower()
+        # Convert to lowercase for consistency in specific columns if they exist
+        for col in ['category', 'type', 'classification', 'risk_decision']:
+            if col in df.columns:
+                df[col] = df[col].str.lower()
         
         return df
 # Classe DataCleaner pour corriger et mapper les dangers (hazards)
@@ -77,10 +86,12 @@ class DataCleaner:
 
     @lru_cache(maxsize=1000)
     def correct_hazard(self, hazard_name: str) -> str:
+        """Use Levenshtein distance to find the best match for correcting hazard names."""
         best_match = min(self.hazards, key=lambda x: distance(x, hazard_name))
         return best_match if distance(best_match, hazard_name) <= Config.MAX_LEVENSHTEIN_DISTANCE else hazard_name
 
     def map_hazard_to_category(self, hazard: Optional[str]) -> str:
+        """Map hazard names to categories based on predefined keywords."""
         if not isinstance(hazard, str):
             return "Other"
         for category, terms in self.hazard_categories.items():
@@ -89,13 +100,24 @@ class DataCleaner:
         return "Other"
 
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply hazard correction and category mapping to the DataFrame."""
+        # Check and correct hazards and hazard_category columns if they exist
         if "hazards" in df.columns:
             self.hazards = df["hazards"].dropna().unique().tolist()
             df["hazards"] = df["hazards"].apply(lambda h: self.correct_hazard(h) if pd.notna(h) else h)
+        if "hazard_category" in df.columns:
             df["hazard_category"] = df["hazards"].apply(self.map_hazard_to_category)
-        df["notifying_country"] = df["notifying_country"].where(df["notifying_country"].isin(notifying_countries), "Other")
-        df["origin"] = df["origin"].where(df["origin"].isin(origin_countries), "Other")
-        df["date"] = pd.to_datetime(df["date"], errors='coerce', format=Config.DATE_FORMAT)
+        
+        # Standardize notifying_country and origin if they exist
+        if "notifying_country" in df.columns:
+            df["notifying_country"] = df["notifying_country"].where(df["notifying_country"].isin(notifying_countries), "Other")
+        if "origin" in df.columns:
+            df["origin"] = df["origin"].where(df["origin"].isin(origin_countries), "Other")
+        
+        # Parse date if it exists
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors='coerce', format=Config.DATE_FORMAT)
+        
         return df.fillna("")
 
 # Classe DataFetcher pour la récupération asynchrone des données
@@ -116,6 +138,7 @@ class DataFetcher:
 
     @staticmethod
     async def get_data_by_weeks(year: int, weeks: List[int]) -> List[pd.DataFrame]:
+        """Fetch data for a list of weeks and return as a list of DataFrames."""
         dfs = []
         for week in weeks:
             url = Config.URL_TEMPLATE.format(str(year)[2:], year, str(week).zfill(2))
@@ -132,6 +155,7 @@ class DataFetcher:
 class DataAnalyzer:
     @staticmethod
     def calculate_descriptive_stats(df: pd.DataFrame) -> Tuple[pd.Series, pd.DataFrame]:
+        """Calculate and return descriptive statistics on the data."""
         try:
             grouped = df.groupby(['notifying_country', 'hazard_category']).size().reset_index(name='notifications_count')
             stats = grouped['notifications_count'].describe()
@@ -147,10 +171,12 @@ class RASFFDashboard:
         self.standardizer = DataStandardizer(notifying_countries, origin_countries)
 
     def render_data_overview(self, df: pd.DataFrame):
+        """Display an overview of the data."""
         st.markdown("## Aperçu des données")
         st.dataframe(df)
 
     def render_statistics(self, df: pd.DataFrame):
+        """Generate and display descriptive statistics."""
         stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
         st.markdown("## Statistiques descriptives des notifications")
         st.write(stats)
@@ -158,6 +184,7 @@ class RASFFDashboard:
         st.dataframe(grouped)
 
     def render_visualizations(self, df: pd.DataFrame):
+        """Generate bar and histogram visualizations of the data."""
         if {"notifying_country", "hazard_category", "notifications_count"}.issubset(df.columns):
             st.markdown("### Notifications par pays")
             fig_countries = px.bar(
@@ -173,23 +200,27 @@ class RASFFDashboard:
             st.warning("Les colonnes de données nécessaires pour les visualisations sont manquantes.")
 
     async def run(self):
+        """Main function to execute the Streamlit dashboard."""
         st.title("Analyseur de données RASFF")
         
-        # Sélection de la plage de dates
+        # Selection of date range for filtering data by weeks
         start_date = st.date_input("Date de début", datetime.date.today() - datetime.timedelta(weeks=8))
         end_date = st.date_input("Date de fin", datetime.date.today())
         selected_weeks = [start_date.isocalendar()[1] + i for i in range((end_date - start_date).days // 7 + 1)]
         
-        # Chargement et nettoyage des données
+        # Load and clean data
         current_year = start_date.year
         dfs = await DataFetcher.get_data_by_weeks(current_year, selected_weeks)
 
         if dfs:
+            # Concatenate data for selected weeks
             df = pd.concat(dfs, ignore_index=True)
+            
+            # Standardize and clean data
             df = self.standardizer.clean_data(df)  # Standardize data
             df = self.data_cleaner.clean_data(df)  # Further clean hazards
             
-            # Affichage structuré des données dans des onglets
+            # Display data in structured tabs
             tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
             
             with tabs[0]:
@@ -201,8 +232,9 @@ class RASFFDashboard:
         else:
             st.error("Aucune donnée disponible pour les semaines sélectionnées.")
 
-# Exécution de l'application Streamlit
+# Execution of the Streamlit application
 if __name__ == "__main__":
     dashboard = RASFFDashboard()
     import asyncio
     asyncio.run(dashboard.run())
+
