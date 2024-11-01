@@ -22,6 +22,7 @@ class Config:
     URL_TEMPLATE: str = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
     MAX_LEVENSHTEIN_DISTANCE: int = 3
     DATE_FORMAT: str = "%Y-%m-%dT%H:%M:%S.%f"
+
 class DataStandardizer:
     def __init__(self, notifying_countries: List[str], origin_countries: List[str]):
         self.notifying_countries = notifying_countries
@@ -69,7 +70,6 @@ class DataStandardizer:
                 df[col] = df[col].str.lower()
         
         return df
-
 class DataCleaner:
     def __init__(self, hazard_categories: dict):
         self.hazard_categories = hazard_categories
@@ -96,6 +96,7 @@ class DataCleaner:
             df["hazard_category"] = df["hazards"].apply(self.map_hazard_to_category)
         
         return df.fillna("")
+
 class DataFetcher:
     @staticmethod
     async def fetch_data(url: str) -> Optional[bytes]:
@@ -164,15 +165,14 @@ class RASFFDashboard:
             st.plotly_chart(fig_issues, use_container_width=True)
         else:
             st.warning("Les colonnes de données nécessaires pour les visualisations sont manquantes.")
-
     async def run(self):
         st.title("Analyseur de données RASFF")
         
-        # Define the CSV URL
+        # Define the URL for the CSV file on GitHub
         csv_url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/rasff_%202020TO30OCT2024.csv"
         
         try:
-            # Load data directly from the URL
+            # Load data directly from the GitHub URL
             df = pd.read_csv(csv_url)
             
             # Standardize and clean data
@@ -197,36 +197,6 @@ class RASFFDashboard:
                 
         except Exception as e:
             st.error(f"Erreur lors du chargement des données: {e}")
-
-        # Date range for future weeks (starting from Nov 4, 2024)
-        start_date = datetime.date(2024, 11, 4)
-        end_date = st.date_input("Date de fin pour les semaines supplémentaires", datetime.date.today())
-        
-        if end_date > start_date:
-            future_weeks = [
-                start_date.isocalendar()[1] + i
-                for i in range((end_date - start_date).days // 7 + 1)
-            ]
-            current_year = start_date.year
-            dfs = await DataFetcher.get_data_by_weeks(current_year, future_weeks)
-
-            if dfs:
-                future_data = pd.concat(dfs, ignore_index=True)
-                future_data = self.standardizer.clean_data(future_data)
-                future_data = self.data_cleaner.clean_data(future_data)
-
-                # Concatenate future data with existing data
-                df = pd.concat([df, future_data], ignore_index=True)
-                st.success("Données futures ajoutées avec succès.")
-
-                # Update visualizations and statistics with combined data
-                stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
-                with tabs[1]:
-                    self.render_statistics(df)
-                with tabs[2]:
-                    self.render_visualizations(grouped)
-            else:
-                st.warning("Aucune donnée disponible pour les semaines sélectionnées.")
 
         # Date range for future weeks (starting from Nov 4, 2024)
         start_date = datetime.date(2024, 11, 4)
