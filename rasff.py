@@ -168,28 +168,35 @@ class RASFFDashboard:
     async def run(self):
         st.title("Analyseur de données RASFF")
         
-        # Load initial data from CSV file
-        df = pd.read_csv('/mnt/data/rasff_ 2020TO30OCT2024.csv')
+        # File uploader for CSV input
+        uploaded_file = st.file_uploader("Veuillez télécharger le fichier CSV", type="csv")
         
-        # Standardize and clean data
-        df = self.standardizer.clean_data(df)  # Standardize data
-        df = self.data_cleaner.clean_data(df)  # Further clean hazards
-        
-        if not df.empty:
-            df['issue_type'] = df.apply(lambda row: classify_issue(row['subject'], row['hazards']), axis=1)
-            stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+        # Check if a file is uploaded
+        if uploaded_file is not None:
+            # Load data from the uploaded CSV file
+            df = pd.read_csv(uploaded_file)
             
-            tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
-            with tabs[0]:
-                self.render_data_overview(df)
-            with tabs[1]:
-                self.render_statistics(df)
-            with tabs[2]:
-                self.render_visualizations(grouped)
+            # Standardize and clean data
+            df = self.standardizer.clean_data(df)  # Standardize data
+            df = self.data_cleaner.clean_data(df)  # Further clean hazards
+            
+            if not df.empty:
+                df['issue_type'] = df.apply(lambda row: classify_issue(row['subject'], row['hazards']), axis=1)
+                stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+                
+                tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
+                with tabs[0]:
+                    self.render_data_overview(df)
+                with tabs[1]:
+                    self.render_statistics(df)
+                with tabs[2]:
+                    self.render_visualizations(grouped)
+            else:
+                st.error("Le fichier CSV est vide ou les données n'ont pas pu être chargées.")
         else:
-            st.error("Le fichier CSV est vide ou les données n'ont pas pu être chargées.")
+            st.warning("Veuillez télécharger un fichier CSV pour commencer l'analyse.")
 
-        # Date range for future weeks
+        # Date range for future weeks (starting from Nov 4, 2024)
         start_date = datetime.date(2024, 11, 4)
         end_date = st.date_input("Date de fin pour les semaines supplémentaires", datetime.date.today())
         
@@ -224,3 +231,4 @@ if __name__ == "__main__":
     dashboard = RASFFDashboard()
     import asyncio
     asyncio.run(dashboard.run())
+
