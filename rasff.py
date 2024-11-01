@@ -2,21 +2,18 @@ import streamlit as st
 st.set_page_config(page_title="Analyseur RASFF", page_icon="📊", layout="wide")
 
 import pandas as pd
-import plotly.express as px
-import httpx
 import datetime
 from io import BytesIO
-from typing import List, Optional, Tuple
-from Levenshtein import distance
+from typing import List, Optional
 from dataclasses import dataclass
 from functools import lru_cache
+from Levenshtein import distance
+import httpx
 
-# Import des fichiers locaux comme modules
-from hazard_categories import hazard_categories
-from notifying_countries import notifying_countries
-from origin_countries import origin_countries
+# Vizzu for advanced charts
+from streamlit_vizzu import Vizzu
 
-# Configuration des constantes avec un modèle de données
+# Configuration for data constants
 @dataclass
 class Config:
     URL_TEMPLATE: str = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
@@ -126,82 +123,27 @@ class DataFetcher:
 
 class DataAnalyzer:
     @staticmethod
-    def calculate_descriptive_stats(df: pd.DataFrame) -> Tuple[pd.Series, pd.DataFrame]:
+    def calculate_descriptive_stats(df: pd.DataFrame) -> pd.DataFrame:
         try:
-            grouped = df.groupby(['category', 'issue_type']).size().reset_index(name='notifications_count')
-            stats = grouped['notifications_count'].describe()
-            return stats, grouped
+            grouped = df.groupby(['Product Category', 'issue_type']).size().reset_index(name='notifications_count')
+            return grouped
         except Exception as e:
             st.error(f"Erreur de calcul des statistiques : {e}")
-            return pd.Series(), pd.DataFrame()
-def classify_issue(hazard_substance: str, hazard_category: str) -> str:
-    categories = hazard_category.lower().split(";")
-    classification_set = set()
-
-    for category in categories:
-        category = category.strip()
-        if 'pathogenic micro-organisms' in category:
-            classification_set.add("Pathogenic Micro-organism")
-        elif 'mycotoxins' in category:
-            classification_set.add("Mycotoxins")
-        elif 'pesticide residues' in category:
-            classification_set.add("Pesticide Residue")
-        elif 'heavy metals' in category:
-            classification_set.add("Heavy Metals")
-        elif 'chemical contamination' in category:
-            classification_set.add("Chemical Contamination")
-        elif 'composition' in category:
-            classification_set.add("Composition Issue")
-        elif 'migration' in category:
-            classification_set.add("Migration Issue")
-        elif 'allergens' in category:
-            classification_set.add("Allergens")
-        elif 'food additives and flavourings' in category:
-            classification_set.add("Food Additives and Flavourings")
-        elif 'environmental pollutants' in category:
-            classification_set.add("Environmental Pollutants")
-        elif 'veterinary medicinal products' in category:
-            classification_set.add("Veterinary Residues")
-        elif 'foreign bodies' in category:
-            classification_set.add("Foreign Bodies")
-        elif 'parasitic infestation' in category:
-            classification_set.add("Parasitic Infestation")
-        elif 'natural toxins' in category:
-            classification_set.add("Natural Toxins")
-        elif 'industrial contaminants' in category:
-            classification_set.add("Industrial Contaminants")
-        elif 'biological contaminants' in category:
-            classification_set.add("Biological Contaminants")
-        elif 'genetically modified' in category:
-            classification_set.add("Genetically Modified")
-        elif 'organoleptic aspects' in category:
-            classification_set.add("Organoleptic Aspects")
-        elif 'novel food' in category:
-            classification_set.add("Novel Food")
-        else:
-            classification_set.add("Other")
-
-    return ", ".join(classification_set)
-
-class RASFFDashboard:
-    def __init__(self):
-        self.data_cleaner = DataCleaner(hazard_categories)
-        self.data_analyzer = DataAnalyzer()
-        self.standardizer = DataStandardizer(notifying_countries, origin_countries)
-
-    def render_data_overview(self, df: pd.DataFrame):
-        st.markdown("## Aperçu des données")
-        st.dataframe(df)
-
+            return pd.DataFrame()
     def render_statistics(self, df: pd.DataFrame):
-        stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+        # Generate descriptive statistics based on Product Category and issue_type
+        grouped = self.data_analyzer.calculate_descriptive_stats(df)
+        
+        if grouped.empty:
+            st.warning("Aucune donnée disponible pour les statistiques.")
+            return
+        
         st.markdown("## Statistiques descriptives des notifications")
-        st.write(stats)
-        st.markdown("### Nombre de notifications par type de produit et type de problème")
+        st.write("### Nombre de notifications par type de produit et type de problème")
         st.dataframe(grouped)
 
     def render_visualizations(self, df: pd.DataFrame):
-        st.markdown("### Visualisations avec filtres")
+        st.markdown("### Visualisations interactives avec filtres")
         
         # Dropdown filters for issue_type and product_category
         issue_type_options = ["Tous"] + sorted(df["issue_type"].dropna().unique())
@@ -219,17 +161,22 @@ class RASFFDashboard:
         if df.empty:
             st.warning("Aucune donnée disponible pour les filtres sélectionnés.")
         else:
-            # Bar chart of notifications by product type
-            fig_categories = px.bar(
-                df, x="Product Category", y="Reference", 
-                color="issue_type", title="Notifications par type de produit",
-                labels={"Reference": "Nombre de notifications"}
+            # Visualization with Vizzu
+            vizzu_chart = Vizzu()
+            
+            # Prepare data for Vizzu
+            vizzu_chart.add_data(
+                data=df,
+                x="Product Category",
+                y="issue_type",
+                size="Reference",
+                color="issue_type",
+                tooltip=["Product Category", "issue_type", "Reference"],
             )
-            st.plotly_chart(fig_categories, use_container_width=True)
-
-            # Pie chart for issue type distribution
-            fig_issues = px.pie(df, names="issue_type", title="Répartition des types de problèmes")
-            st.plotly_chart(fig_issues, use_container_width=True)
+            
+            # Show Vizzu chart
+            vizzu_chart.set_chart_type("bar")
+            vizzu_chart.show()
     async def run(self):
         st.title("Analyseur de données RASFF")
         
@@ -284,7 +231,6 @@ class RASFFDashboard:
                 st.success("Données futures ajoutées avec succès.")
 
                 # Update visualizations and statistics with combined data
-                stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
                 with tabs[1]:
                     self.render_statistics(df)
                 with tabs[2]:
