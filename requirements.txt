@@ -7,3 +7,4 @@ openpyxl
 pandasai
 pyyaml
 google-generativeai
+ipyvizzu streamlit-vizzu
