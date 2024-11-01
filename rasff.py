@@ -168,22 +168,23 @@ class RASFFDashboard:
     async def run(self):
         st.title("Analyseur de données RASFF")
         
-        # File uploader for CSV input
-        uploaded_file = st.file_uploader("Veuillez télécharger le fichier CSV", type="csv")
+        # Define the CSV URL
+        csv_url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/rasff_%202020TO30OCT2024.csv"
         
-        # Check if a file is uploaded
-        if uploaded_file is not None:
-            # Load data from the uploaded CSV file
-            df = pd.read_csv(uploaded_file)
+        try:
+            # Load data directly from the URL
+            df = pd.read_csv(csv_url)
             
             # Standardize and clean data
-            df = self.standardizer.clean_data(df)  # Standardize data
-            df = self.data_cleaner.clean_data(df)  # Further clean hazards
+            df = self.standardizer.clean_data(df)
+            df = self.data_cleaner.clean_data(df)
             
             if not df.empty:
+                # Classify and calculate statistics
                 df['issue_type'] = df.apply(lambda row: classify_issue(row['subject'], row['hazards']), axis=1)
                 stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
                 
+                # Display data overview, statistics, and visualizations using Streamlit tabs
                 tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
                 with tabs[0]:
                     self.render_data_overview(df)
@@ -193,8 +194,39 @@ class RASFFDashboard:
                     self.render_visualizations(grouped)
             else:
                 st.error("Le fichier CSV est vide ou les données n'ont pas pu être chargées.")
-        else:
-            st.warning("Veuillez télécharger un fichier CSV pour commencer l'analyse.")
+                
+        except Exception as e:
+            st.error(f"Erreur lors du chargement des données: {e}")
+
+        # Date range for future weeks (starting from Nov 4, 2024)
+        start_date = datetime.date(2024, 11, 4)
+        end_date = st.date_input("Date de fin pour les semaines supplémentaires", datetime.date.today())
+        
+        if end_date > start_date:
+            future_weeks = [
+                start_date.isocalendar()[1] + i
+                for i in range((end_date - start_date).days // 7 + 1)
+            ]
+            current_year = start_date.year
+            dfs = await DataFetcher.get_data_by_weeks(current_year, future_weeks)
+
+            if dfs:
+                future_data = pd.concat(dfs, ignore_index=True)
+                future_data = self.standardizer.clean_data(future_data)
+                future_data = self.data_cleaner.clean_data(future_data)
+
+                # Concatenate future data with existing data
+                df = pd.concat([df, future_data], ignore_index=True)
+                st.success("Données futures ajoutées avec succès.")
+
+                # Update visualizations and statistics with combined data
+                stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+                with tabs[1]:
+                    self.render_statistics(df)
+                with tabs[2]:
+                    self.render_visualizations(grouped)
+            else:
+                st.warning("Aucune donnée disponible pour les semaines sélectionnées.")
 
         # Date range for future weeks (starting from Nov 4, 2024)
         start_date = datetime.date(2024, 11, 4)
