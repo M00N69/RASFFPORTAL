@@ -135,10 +135,6 @@ class DataAnalyzer:
             st.error(f"Erreur de calcul des statistiques : {e}")
             return pd.Series(), pd.DataFrame()
 def classify_issue(hazard_substance: str, hazard_category: str) -> str:
-    """
-    Classifies an issue based on hazard substance and hazard category.
-    Handles multiple hazard categories in one entry by splitting on semicolons.
-    """
     categories = hazard_category.lower().split(";")
     classification_set = set()
 
@@ -205,19 +201,35 @@ class RASFFDashboard:
         st.dataframe(grouped)
 
     def render_visualizations(self, df: pd.DataFrame):
-        if {"category", "issue_type", "notifications_count"}.issubset(df.columns):
-            st.markdown("### Notifications par type de produit")
+        st.markdown("### Visualisations avec filtres")
+        
+        # Dropdown filters for issue_type and product_category
+        issue_type_options = ["Tous"] + sorted(df["issue_type"].dropna().unique())
+        product_category_options = ["Tous"] + sorted(df["Product Category"].dropna().unique())
+
+        selected_issue_type = st.selectbox("Filtrer par type de problème", options=issue_type_options)
+        selected_product_category = st.selectbox("Filtrer par catégorie de produit", options=product_category_options)
+        
+        # Apply filters to the DataFrame
+        if selected_issue_type != "Tous":
+            df = df[df["issue_type"] == selected_issue_type]
+        if selected_product_category != "Tous":
+            df = df[df["Product Category"] == selected_product_category]
+
+        if df.empty:
+            st.warning("Aucune donnée disponible pour les filtres sélectionnés.")
+        else:
+            # Bar chart of notifications by product type
             fig_categories = px.bar(
-                df, x="category", y="notifications_count", 
-                color="issue_type", title="Notifications par type de produit"
+                df, x="Product Category", y="Reference", 
+                color="issue_type", title="Notifications par type de produit",
+                labels={"Reference": "Nombre de notifications"}
             )
             st.plotly_chart(fig_categories, use_container_width=True)
 
-            st.markdown("### Distribution des types de problèmes")
-            fig_issues = px.pie(df, names="issue_type", values="notifications_count", title="Répartition des types de problèmes")
+            # Pie chart for issue type distribution
+            fig_issues = px.pie(df, names="issue_type", title="Répartition des types de problèmes")
             st.plotly_chart(fig_issues, use_container_width=True)
-        else:
-            st.warning("Les colonnes de données nécessaires pour les visualisations sont manquantes.")
     async def run(self):
         st.title("Analyseur de données RASFF")
         
@@ -285,4 +297,3 @@ if __name__ == "__main__":
     dashboard = RASFFDashboard()
     import asyncio
     asyncio.run(dashboard.run())
-
