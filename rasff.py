@@ -11,6 +11,13 @@ from Levenshtein import distance
 import httpx
 import plotly.express as px
 
+# Import external data from Python files
+from hazard_categories import hazard_categories
+from hazards import hazards
+from notifying_countries import notifying_countries
+from origin_countries import origin_countries
+from product_categories import product_categories
+
 # Configuration for data constants
 @dataclass
 class Config:
@@ -68,7 +75,7 @@ class DataStandardizer:
 class DataCleaner:
     def __init__(self, hazard_categories: dict):
         self.hazard_categories = hazard_categories
-        self.hazards = []
+        self.hazards = hazards
 
     @lru_cache(maxsize=1000)
     def correct_hazard(self, hazard_name: str) -> str:
