@@ -22,6 +22,7 @@ class Config:
     URL_TEMPLATE: str = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
     MAX_LEVENSHTEIN_DISTANCE: int = 3
     DATE_FORMAT: str = "%Y-%m-%dT%H:%M:%S.%f"
+
 class DataStandardizer:
     def __init__(self, notifying_countries: List[str], origin_countries: List[str]):
         self.notifying_countries = notifying_countries
@@ -78,7 +79,7 @@ class DataStandardizer:
                 df[col] = df[col].str.lower()
         
         return df
-# Classe DataCleaner pour corriger et mapper les dangers (hazards)
+
 class DataCleaner:
     def __init__(self, hazard_categories: dict):
         self.hazard_categories = hazard_categories
@@ -108,19 +109,8 @@ class DataCleaner:
         if "hazard_category" in df.columns:
             df["hazard_category"] = df["hazards"].apply(self.map_hazard_to_category)
         
-        # Standardize notifying_country and origin if they exist
-        if "notifying_country" in df.columns:
-            df["notifying_country"] = df["notifying_country"].where(df["notifying_country"].isin(notifying_countries), "Other")
-        if "origin" in df.columns:
-            df["origin"] = df["origin"].where(df["origin"].isin(origin_countries), "Other")
-        
-        # Parse date if it exists
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"], errors='coerce', format=Config.DATE_FORMAT)
-        
         return df.fillna("")
 
-# Classe DataFetcher pour la récupération asynchrone des données
 class DataFetcher:
     @staticmethod
     async def fetch_data(url: str) -> Optional[bytes]:
@@ -142,7 +132,6 @@ class DataFetcher:
         dfs = []
         for week in weeks:
             url = Config.URL_TEMPLATE.format(str(year)[2:], year, str(week).zfill(2))
-            print(f"Fetching data from: {url}")
             content = await DataFetcher.fetch_data(url)
             if content:
                 df = pd.read_excel(BytesIO(content))
@@ -151,7 +140,6 @@ class DataFetcher:
                 st.warning(f"Données indisponibles pour l'URL : {url}")
         return dfs
 
-# Classe DataAnalyzer pour générer des statistiques descriptives
 class DataAnalyzer:
     @staticmethod
     def calculate_descriptive_stats(df: pd.DataFrame) -> Tuple[pd.Series, pd.DataFrame]:
@@ -163,7 +151,7 @@ class DataAnalyzer:
         except Exception as e:
             st.error(f"Erreur de calcul des statistiques : {e}")
             return pd.Series(), pd.DataFrame()
-# Classe principale RASFFDashboard pour gérer l'interface utilisateur
+
 class RASFFDashboard:
     def __init__(self):
         self.data_cleaner = DataCleaner(hazard_categories)
@@ -186,7 +174,6 @@ class RASFFDashboard:
     def render_visualizations(self, df: pd.DataFrame):
         """Generate bar and histogram visualizations of the data."""
         if {"category", "issue_type", "notifications_count"}.issubset(df.columns):
-            # Bar chart of notifications by product type
             st.markdown("### Notifications par type de produit")
             fig_categories = px.bar(
                 df, x="category", y="notifications_count", 
@@ -194,7 +181,6 @@ class RASFFDashboard:
             )
             st.plotly_chart(fig_categories, use_container_width=True)
 
-            # Pie chart for issue type distribution
             st.markdown("### Distribution des types de problèmes")
             fig_issues = px.pie(df, names="issue_type", values="notifications_count", title="Répartition des types de problèmes")
             st.plotly_chart(fig_issues, use_container_width=True)
@@ -205,28 +191,21 @@ class RASFFDashboard:
         """Main function to execute the Streamlit dashboard."""
         st.title("Analyseur de données RASFF")
         
-        # Selection of date range for filtering data by weeks
-        start_date = st.date_input("Date de début", datetime.date.today() - datetime.timedelta(weeks=8))
-        end_date = st.date_input("Date de fin", datetime.date.today())
-        selected_weeks = [start_date.isocalendar()[1] + i for i in range((end_date - start_date).days // 7 + 1)]
+        # Load initial data from CSV file
+        df = pd.read_csv('/mnt/data/rasff_ 2020TO30OCT2024.csv')
         
-        # Load and clean data
-        current_year = start_date.year
-        dfs = await DataFetcher.get_data_by_weeks(current_year, selected_weeks)
-
-        if dfs:
-            # Concatenate data for selected weeks
-            df = pd.concat(dfs, ignore_index=True)
-            
-            # Standardize and clean data
-            df = self.standardizer.clean_data(df)  # Standardize data
-            df = self.data_cleaner.clean_data(df)  # Further clean hazards
-            
+        # Standardize and clean data
+        # Standardize and clean data
+        df = self.standardizer.clean_data(df)  # Standardize data
+        df = self.data_cleaner.clean_data(df)  # Further clean hazards
+        
+        # Display overview and analyze data if available
+        if not df.empty:
             # Classify and calculate statistics
             df['issue_type'] = df.apply(lambda row: classify_issue(row['subject'], row['hazards']), axis=1)
             stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
             
-            # Display data in structured tabs
+            # Setup tabs for structured display
             tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
             
             with tabs[0]:
@@ -236,7 +215,38 @@ class RASFFDashboard:
             with tabs[2]:
                 self.render_visualizations(grouped)
         else:
-            st.error("Aucune donnée disponible pour les semaines sélectionnées.")
+            st.error("Le fichier CSV est vide ou les données n'ont pas pu être chargées.")
+
+        # Select date range for additional data fetching (future weeks starting from Nov 4, 2024)
+        start_date = datetime.date(2024, 11, 4)
+        end_date = st.date_input("Date de fin pour les semaines supplémentaires", datetime.date.today())
+        
+        if end_date > start_date:
+            future_weeks = [
+                start_date.isocalendar()[1] + i
+                for i in range((end_date - start_date).days // 7 + 1)
+            ]
+            current_year = start_date.year
+            dfs = await DataFetcher.get_data_by_weeks(current_year, future_weeks)
+
+            if dfs:
+                # Concatenate future data with existing data
+                future_data = pd.concat(dfs, ignore_index=True)
+                future_data = self.standardizer.clean_data(future_data)
+                future_data = self.data_cleaner.clean_data(future_data)
+
+                # Add future data to the main dataframe
+                df = pd.concat([df, future_data], ignore_index=True)
+                st.success("Données futures ajoutées avec succès.")
+
+                # Update visualizations and statistics with combined data
+                stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
+                with tabs[1]:
+                    self.render_statistics(df)
+                with tabs[2]:
+                    self.render_visualizations(grouped)
+            else:
+                st.warning("Aucune donnée disponible pour les semaines sélectionnées.")
 
 # Execution of the Streamlit application
 if __name__ == "__main__":
