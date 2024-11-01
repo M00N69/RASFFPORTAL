@@ -134,6 +134,59 @@ class DataAnalyzer:
         except Exception as e:
             st.error(f"Erreur de calcul des statistiques : {e}")
             return pd.Series(), pd.DataFrame()
+def classify_issue(hazard_substance: str, hazard_category: str) -> str:
+    """
+    Classifies an issue based on hazard substance and hazard category.
+    Handles multiple hazard categories in one entry by splitting on semicolons.
+    """
+    categories = hazard_category.lower().split(";")
+    classification_set = set()
+
+    for category in categories:
+        category = category.strip()
+        if 'pathogenic micro-organisms' in category:
+            classification_set.add("Pathogenic Micro-organism")
+        elif 'mycotoxins' in category:
+            classification_set.add("Mycotoxins")
+        elif 'pesticide residues' in category:
+            classification_set.add("Pesticide Residue")
+        elif 'heavy metals' in category:
+            classification_set.add("Heavy Metals")
+        elif 'chemical contamination' in category:
+            classification_set.add("Chemical Contamination")
+        elif 'composition' in category:
+            classification_set.add("Composition Issue")
+        elif 'migration' in category:
+            classification_set.add("Migration Issue")
+        elif 'allergens' in category:
+            classification_set.add("Allergens")
+        elif 'food additives and flavourings' in category:
+            classification_set.add("Food Additives and Flavourings")
+        elif 'environmental pollutants' in category:
+            classification_set.add("Environmental Pollutants")
+        elif 'veterinary medicinal products' in category:
+            classification_set.add("Veterinary Residues")
+        elif 'foreign bodies' in category:
+            classification_set.add("Foreign Bodies")
+        elif 'parasitic infestation' in category:
+            classification_set.add("Parasitic Infestation")
+        elif 'natural toxins' in category:
+            classification_set.add("Natural Toxins")
+        elif 'industrial contaminants' in category:
+            classification_set.add("Industrial Contaminants")
+        elif 'biological contaminants' in category:
+            classification_set.add("Biological Contaminants")
+        elif 'genetically modified' in category:
+            classification_set.add("Genetically Modified")
+        elif 'organoleptic aspects' in category:
+            classification_set.add("Organoleptic Aspects")
+        elif 'novel food' in category:
+            classification_set.add("Novel Food")
+        else:
+            classification_set.add("Other")
+
+    return ", ".join(classification_set)
+
 class RASFFDashboard:
     def __init__(self):
         self.data_cleaner = DataCleaner(hazard_categories)
@@ -179,11 +232,10 @@ class RASFFDashboard:
             df = self.standardizer.clean_data(df)
             df = self.data_cleaner.clean_data(df)
             
+            # Classify each row based on the hazard substance and hazard category
+            df['issue_type'] = df.apply(lambda row: classify_issue(row['Hazard Substance'], row['Hazard Category']), axis=1)
+            
             if not df.empty:
-                # Classify and calculate statistics
-                df['issue_type'] = df.apply(lambda row: classify_issue(row['subject'], row['hazards']), axis=1)
-                stats, grouped = self.data_analyzer.calculate_descriptive_stats(df)
-                
                 # Display data overview, statistics, and visualizations using Streamlit tabs
                 tabs = st.tabs(["Aperçu", "Statistiques", "Visualisations"])
                 with tabs[0]:
@@ -191,7 +243,7 @@ class RASFFDashboard:
                 with tabs[1]:
                     self.render_statistics(df)
                 with tabs[2]:
-                    self.render_visualizations(grouped)
+                    self.render_visualizations(df)
             else:
                 st.error("Le fichier CSV est vide ou les données n'ont pas pu être chargées.")
                 
@@ -224,7 +276,7 @@ class RASFFDashboard:
                 with tabs[1]:
                     self.render_statistics(df)
                 with tabs[2]:
-                    self.render_visualizations(grouped)
+                    self.render_visualizations(df)
             else:
                 st.warning("Aucune donnée disponible pour les semaines sélectionnées.")
 
