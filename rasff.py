@@ -65,7 +65,9 @@ class RASFFDashboard:
         df['country_origin'].fillna("Unknown", inplace=True)
 
         # Map hazard_category to its French equivalent if present in hazard_categories dictionary
-        df['hazard_category_mapped'] = df['hazard_category'].map(hazard_categories).fillna(df['hazard_category'])
+        df['hazard_category_mapped'] = df['hazard_category'].apply(
+            lambda x: hazard_categories.get(x.strip().lower(), "Unknown")
+        )
 
         return df
 
