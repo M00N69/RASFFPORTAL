@@ -6,17 +6,29 @@ import requests
 import datetime
 from typing import List
 import re
+import ast
 
-# Load lists directly from GitHub for full data consistency
-def load_list_from_github(filename: str) -> pd.DataFrame:
+# Function to load list or dictionary directly from GitHub raw file
+def load_list_or_dict_from_github(filename: str):
     base_url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/"
     url = f"{base_url}{filename}"
-    return pd.read_csv(url, header=None)[0].tolist()
+    response = requests.get(url)
+    if response.status_code == 200:
+        content = response.text
+        try:
+            return ast.literal_eval(content.strip())  # Safely evaluate the string as Python code (list or dict)
+        except (SyntaxError, ValueError) as e:
+            st.error(f"Failed to parse {filename}: {e}")
+            return [] if filename.endswith("py") else {}
+    else:
+        st.error(f"Failed to load {filename} from GitHub.")
+        return [] if filename.endswith("py") else {}
 
-hazard_categories = load_list_from_github("hazard_categories.py")
-notifying_countries = load_list_from_github("notifying_countries.py")
-origin_countries = load_list_from_github("origin_countries.py")
-product_categories = load_list_from_github("product_categories.py")
+# Load lists and dictionaries from GitHub
+hazard_categories = load_list_or_dict_from_github("hazard_categories.py")
+notifying_countries = load_list_or_dict_from_github("notifying_countries.py")
+origin_countries = load_list_or_dict_from_github("origin_countries.py")
+product_categories = load_list_or_dict_from_github("product_categories.py")
 
 # Function to download and clean data from multiple weeks
 def telecharger_et_nettoyer_donnees(annee, semaines: List[int]) -> pd.DataFrame:
