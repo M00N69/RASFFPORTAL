@@ -10,22 +10,24 @@ from dataclasses import dataclass
 GITHUB_BASE_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/"
 
 # Load lists dynamically from GitHub
-def load_list_from_github(filename: str, list_type: str = "list") -> List:
+def load_list_from_github(filename: str, file_type: str = "list") -> List:
     url = f"{GITHUB_BASE_URL}{filename}"
     response = requests.get(url)
     if response.status_code == 200:
-        if list_type == "list":
+        if file_type == "list":
             return response.text.splitlines()
-        elif list_type == "dict":
-            return pd.read_csv(url, index_col=0, squeeze=True).to_dict()
+        elif file_type == "dict":
+            local_dict = {}
+            exec(response.text, {}, local_dict)
+            return local_dict.get(filename.split('.')[0], {})  # Extract the dictionary by key
     else:
         st.error(f"Failed to load {filename} from GitHub.")
         return []
 
 # Load data from GitHub
-notifying_countries = load_list_from_github("notifying_countries.py")
-origin_countries = load_list_from_github("origin_countries.py")
-hazard_categories = load_list_from_github("hazard_categories.py", list_type="dict")
+notifying_countries = load_list_from_github("notifying_countries.py", file_type="list")
+origin_countries = load_list_from_github("origin_countries.py", file_type="list")
+hazard_categories = load_list_from_github("hazard_categories.py", file_type="dict")
 
 # Configuration for constants
 @dataclass
