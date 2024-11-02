@@ -73,8 +73,10 @@ def nettoyer_donnees(df: pd.DataFrame) -> pd.DataFrame:
     df['notification_from'] = df['notification_from'].apply(lambda x: re.sub(r"\s*\(.*\)", "", str(x)).strip())
     df['country_origin'] = df['country_origin'].apply(lambda x: re.sub(r"\s*\(.*\)", "", str(x)).strip())
 
-    # Map hazard categories to French terms
-    df['hazard_category_mapped'] = df['hazard_category'].apply(lambda x: hazard_categories.get(x.strip().lower(), x))
+    # Map hazard categories to French terms, handling missing values
+    df['hazard_category_mapped'] = df['hazard_category'].apply(
+        lambda x: hazard_categories.get(x.strip().lower(), x) if pd.notnull(x) else "Unknown"
+    )
 
     return df
 
