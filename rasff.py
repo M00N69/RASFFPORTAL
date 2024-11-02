@@ -90,9 +90,19 @@ class EnhancedRASFFDashboard:
         """Displays the sidebar filters and instructions."""
         st.sidebar.header("Filter Options")
         
-        # Date range filter
-        min_date, max_date = df['date'].min(), df['date'].max()
-        date_range = st.sidebar.slider("Date Range", min_value=min_date, max_value=max_date, value=(min_date, max_date))
+        # Ensure valid date range for slider
+        if not df['date'].isna().all():
+            min_date, max_date = df['date'].min(), df['date'].max()
+            date_range = st.sidebar.slider(
+                "Date Range", 
+                min_value=min_date.date() if min_date else datetime.date(2020, 1, 1),
+                max_value=max_date.date() if max_date else datetime.date.today(),
+                value=(min_date.date() if min_date else datetime.date(2020, 1, 1), 
+                       max_date.date() if max_date else datetime.date.today())
+            )
+        else:
+            st.sidebar.error("No valid date information available in data.")
+            return df
         
         # Category filters
         selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['Product Category'].unique()))
@@ -100,7 +110,7 @@ class EnhancedRASFFDashboard:
         selected_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['Notification From'].unique()))
         
         # Apply filters
-        filtered_df = df[(df['date'] >= date_range[0]) & (df['date'] <= date_range[1])]
+        filtered_df = df[(df['date'] >= pd.to_datetime(date_range[0])) & (df['date'] <= pd.to_datetime(date_range[1]))]
         if selected_categories:
             filtered_df = filtered_df[filtered_df['Product Category'].isin(selected_categories)]
         if selected_issues:
