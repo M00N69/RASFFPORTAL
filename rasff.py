@@ -1,231 +1,161 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from ipyvizzu import Chart, Data, Config, Style, Animation
-import streamlit.components.v1 as components
-from typing import List, Optional
-from dataclasses import dataclass
 import plotly.express as px
-from streamlit_vizzu import VizzuChart
+from typing import List
+from dataclasses import dataclass
+import httpx
+from io import BytesIO
 
-# Réutilisation des imports et classes existantes...
+# Import local data files for hazards and categories
 from hazard_categories import hazard_categories
 from hazards import hazards
 from notifying_countries import notifying_countries
 from origin_countries import origin_countries
 from product_categories import product_categories
 
-# Les classes Config, DataStandardizer, DataCleaner, et DataFetcher restent inchangées...
+# Configuration for constants
+@dataclass
+class Config:
+    URL_TEMPLATE: str = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
+    MAX_LEVENSHTEIN_DISTANCE: int = 3
+    CSV_URL: str = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/rasff_%202020TO30OCT2024.csv"
 
-class EnhancedDataAnalyzer:
-    @staticmethod
-    def prepare_vizzu_data(df: pd.DataFrame) -> dict:
-        """Prépare les données pour PageVizzu."""
-        vizzu_data = {
-            'series': [
-                {'name': 'Product Category', 'values': df['Product Category'].tolist()},
-                {'name': 'issue_type', 'values': df['issue_type'].tolist()},
-                {'name': 'count', 'values': [1] * len(df)},
-                {'name': 'notifying_country', 'values': df['notifying_country'].tolist()},
-                {'name': 'date', 'values': df['date'].dt.strftime('%Y-%m').tolist()},
-                {'name': 'risk_decision', 'values': df['risk_decision'].tolist()}
-            ]
-        }
-        return vizzu_data
+# Helper class for cleaning and standardizing data
+class DataStandardizer:
+    def __init__(self, notifying_countries: List[str], origin_countries: List[str]):
+        self.notifying_countries = notifying_countries
+        self.origin_countries = origin_countries
 
+    def standardize_country(self, country: str) -> str:
+        return country if country in self.notifying_countries else "Other"
+    
+    def standardize_date(self, date):
+        if pd.isna(date):
+            return pd.NaT
+        try:
+            return pd.to_datetime(date, errors='coerce')
+        except:
+            return pd.NaT
+    
+    def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.drop(columns=['Unnamed: 0'], errors='ignore')
+        
+        # Standardize country columns
+        if 'notifying_country' in df.columns:
+            df['notifying_country'] = df['notifying_country'].apply(self.standardize_country)
+        if 'origin' in df.columns:
+            df['origin'] = df['origin'].apply(self.standardize_country)
+        
+        # Parse and standardize date column
+        if 'date' in df.columns:
+            df['date'] = df['date'].apply(self.standardize_date)
+        
+        # Fill missing values in key columns
+        df['hazard_category'].fillna("Unknown", inplace=True)
+        df['Product Category'].fillna("Unknown", inplace=True)
+        
+        return df
+class DataAnalyzer:
     @staticmethod
-    def create_temporal_analysis(df: pd.DataFrame) -> dict:
-        """Analyse temporelle des notifications."""
-        temporal_data = df.groupby([
-            pd.Grouper(key='date', freq='M'),
-            'issue_type'
-        ]).size().reset_index(name='count')
+    def calculate_temporal_trends(df: pd.DataFrame) -> pd.DataFrame:
+        """Analyze notifications trends over time."""
+        temporal_data = df.groupby([pd.Grouper(key='date', freq='M'), 'issue_type']).size().reset_index(name='count')
         return temporal_data
 
+    @staticmethod
+    def prepare_map_data(df: pd.DataFrame) -> pd.DataFrame:
+        """Prepare data for geographic visualization."""
+        return df.groupby('notifying_country').size().reset_index(name='count')
 class EnhancedRASFFDashboard:
     def __init__(self):
-        self.data_cleaner = DataCleaner(hazard_categories)
-        self.data_analyzer = EnhancedDataAnalyzer()
         self.standardizer = DataStandardizer(notifying_countries, origin_countries)
+        self.analyzer = DataAnalyzer()
 
-    def create_vizzu_chart(self, data: dict, chart_type: str):
-        """Crée un graphique PageVizzu."""
-        chart = VizzuChart()
+    def render_sidebar(self, df: pd.DataFrame):
+        """Displays the sidebar filters and instructions."""
+        st.sidebar.header("Filter Options")
         
-        if chart_type == "distribution":
-            chart.animate(
-                Data.filter("record.Product Category !== null"),
-                Config({
-                    "channels": {
-                        "y": {"set": ["count"]},
-                        "x": {"set": ["Product Category"]},
-                        "color": {"set": ["issue_type"]}
-                    },
-                    "title": "Distribution des notifications par catégorie de produit",
-                    "geometry": "rectangle"
-                })
-            )
-        elif chart_type == "timeline":
-            chart.animate(
-                Data.filter("record.date !== null"),
-                Config({
-                    "channels": {
-                        "x": {"set": ["date"]},
-                        "y": {"set": ["count"]},
-                        "color": {"set": ["issue_type"]}
-                    },
-                    "title": "Évolution temporelle des notifications",
-                    "geometry": "line"
-                })
-            )
-
-        return chart
-
-    def render_enhanced_filters(self, df: pd.DataFrame):
-        """Affiche des filtres améliorés."""
-        st.sidebar.header("Filtres avancés")
+        # Date range filter
+        min_date, max_date = df['date'].min(), df['date'].max()
+        date_range = st.sidebar.slider("Date Range", min_value=min_date, max_value=max_date, value=(min_date, max_date))
         
-        # Filtres temporels
-        date_range = st.sidebar.date_input(
-            "Période",
-            value=(df['date'].min(), df['date'].max()),
-            min_value=df['date'].min(),
-            max_value=df['date'].max()
-        )
-
-        # Filtres multi-sélection
-        selected_categories = st.sidebar.multiselect(
-            "Catégories de produits",
-            options=sorted(df['Product Category'].unique())
-        )
-
-        selected_issues = st.sidebar.multiselect(
-            "Types de problèmes",
-            options=sorted(df['issue_type'].unique())
-        )
-
-        selected_countries = st.sidebar.multiselect(
-            "Pays notifiants",
-            options=sorted(df['notifying_country'].unique())
-        )
-
-        # Filtre de décision de risque
-        risk_decisions = st.sidebar.multiselect(
-            "Décisions de risque",
-            options=sorted(df['risk_decision'].unique())
-        )
-
-        # Application des filtres
-        filtered_df = df.copy()
+        # Category filters
+        selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['Product Category'].unique()))
+        selected_issues = st.sidebar.multiselect("Issue Types", sorted(df['issue_type'].unique()))
+        selected_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notifying_country'].unique()))
+        
+        # Apply filters
+        filtered_df = df[(df['date'] >= date_range[0]) & (df['date'] <= date_range[1])]
         if selected_categories:
             filtered_df = filtered_df[filtered_df['Product Category'].isin(selected_categories)]
         if selected_issues:
             filtered_df = filtered_df[filtered_df['issue_type'].isin(selected_issues)]
         if selected_countries:
             filtered_df = filtered_df[filtered_df['notifying_country'].isin(selected_countries)]
-        if risk_decisions:
-            filtered_df = filtered_df[filtered_df['risk_decision'].isin(risk_decisions)]
         
-        filtered_df = filtered_df[
-            (filtered_df['date'] >= pd.to_datetime(date_range[0])) &
-            (filtered_df['date'] <= pd.to_datetime(date_range[1]))
-        ]
-
+        # Instructions expander
+        with st.sidebar.expander("Instructions"):
+            st.write("""
+                - Use the filters above to refine data by date, category, and country.
+                - View various charts and trends by switching tabs.
+                - The 'Risk Matrix' shows the relationship between issue types and risk decisions.
+            """)
+        
         return filtered_df
 
-    def render_enhanced_visualizations(self, df: pd.DataFrame):
-        """Affiche des visualisations améliorées avec PageVizzu."""
-        st.header("Visualisations interactives avancées")
+    def render_tabs(self, df: pd.DataFrame):
+        """Displays the main content tabs with visualizations."""
+        tabs = st.tabs(["Overview", "Temporal Trends", "Geographic Analysis", "Risk Matrix"])
 
-        # Préparation des données pour PageVizzu
-        vizzu_data = self.data_analyzer.prepare_vizzu_data(df)
+        with tabs[0]:
+            st.write("### Overview of Notifications")
+            st.dataframe(df)
+        
+        with tabs[1]:
+            # Temporal trend analysis
+            temporal_data = self.analyzer.calculate_temporal_trends(df)
+            fig_trends = px.line(temporal_data, x='date', y='count', color='issue_type', title="Temporal Trends by Issue Type")
+            st.plotly_chart(fig_trends)
 
-        # Création des onglets pour différentes visualisations
-        viz_tabs = st.tabs(["Distribution", "Évolution temporelle", "Analyse géographique", "Matrices de risque"])
+        with tabs[2]:
+            # Geographic distribution map
+            map_data = self.analyzer.prepare_map_data(df)
+            fig_map = px.choropleth(map_data, locations='notifying_country', locationmode='country names', color='count', title="Geographic Distribution")
+            st.plotly_chart(fig_map)
 
-        with viz_tabs[0]:
-            distribution_chart = self.create_vizzu_chart(vizzu_data, "distribution")
-            st.write(distribution_chart)
+        with tabs[3]:
+            # Risk matrix heatmap
+            risk_matrix = pd.crosstab(df['risk_decision'], df['issue_type'])
+            fig_matrix = px.imshow(risk_matrix, title="Risk Matrix by Issue Type", labels=dict(x="Issue Type", y="Risk Decision", color="Count"))
+            st.plotly_chart(fig_matrix)
 
-        with viz_tabs[1]:
-            temporal_data = self.data_analyzer.create_temporal_analysis(df)
-            timeline_chart = self.create_vizzu_chart(temporal_data, "timeline")
-            st.write(timeline_chart)
-
-        with viz_tabs[2]:
-            # Carte choroplèthe des notifications par pays
-            fig_map = px.choropleth(
-                df.groupby('notifying_country').size().reset_index(name='count'),
-                locations='notifying_country',
-                locationmode='country names',
-                color='count',
-                title="Répartition géographique des notifications",
-                color_continuous_scale='Viridis'
-            )
-            st.plotly_chart(fig_map, use_container_width=True)
-
-        with viz_tabs[3]:
-            # Matrice de risque interactive
-            risk_matrix = pd.crosstab(
-                df['risk_decision'],
-                df['issue_type'],
-                margins=True
-            )
-            
-            fig_matrix = px.imshow(
-                risk_matrix,
-                title="Matrice de risque par type de problème",
-                labels=dict(x="Type de problème", y="Décision de risque", color="Nombre de cas")
-            )
-            st.plotly_chart(fig_matrix, use_container_width=True)
+    async def load_data(self):
+        """Loads data from the remote URL and preprocesses it."""
+        try:
+            # Load initial data
+            df = pd.read_csv(Config.CSV_URL)
+            df = self.standardizer.clean_data(df)
+            return df
+        except Exception as e:
+            st.error(f"Error loading data: {e}")
+            return pd.DataFrame()
 
     async def run(self):
-        st.set_page_config(page_title="Analyseur RASFF Amélioré", layout="wide")
-        st.title("Analyseur de données RASFF - Version améliorée")
-
-        try:
-            # Chargement des données
-            csv_url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/refs/heads/main/rasff_%202020TO30OCT2024.csv"
-            df = pd.read_csv(csv_url)
+        st.set_page_config(page_title="Enhanced RASFF Dashboard", layout="wide")
+        st.title("RASFF Data Dashboard")
+        
+        # Load and preprocess data
+        df = await self.load_data()
+        
+        if not df.empty:
+            # Render sidebar filters and apply them to the data
+            filtered_df = self.render_sidebar(df)
             
-            # Nettoyage et standardisation
-            df = self.standardizer.clean_data(df)
-            df = self.data_cleaner.clean_data(df)
-            df['issue_type'] = df.apply(lambda row: classify_issue(row['Hazard Substance'], row['Hazard Category']), axis=1)
-
-            if not df.empty:
-                # Application des filtres
-                filtered_df = self.render_enhanced_filters(df)
-                
-                # Affichage des visualisations
-                self.render_enhanced_visualizations(filtered_df)
-                
-                # Ajout d'une section de statistiques résumées
-                st.header("Statistiques clés")
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric("Total des notifications", len(filtered_df))
-                with col2:
-                    st.metric("Catégories de produits uniques", filtered_df['Product Category'].nunique())
-                with col3:
-                    st.metric("Types de problèmes uniques", filtered_df['issue_type'].nunique())
-
-                # Option d'export des données filtrées
-                if st.button("Exporter les données filtrées (CSV)"):
-                    csv = filtered_df.to_csv(index=False)
-                    st.download_button(
-                        "Télécharger",
-                        csv,
-                        "rasff_filtered_data.csv",
-                        "text/csv",
-                        key='download-csv'
-                    )
-            else:
-                st.error("Le fichier CSV est vide ou les données n'ont pas pu être chargées.")
-
-        except Exception as e:
-            st.error(f"Erreur lors du chargement des données: {e}")
+            # Render main content tabs with filtered data
+            self.render_tabs(filtered_df)
+        else:
+            st.error("No data available. Check the data source or URL.")
 
 if __name__ == "__main__":
     dashboard = EnhancedRASFFDashboard()
