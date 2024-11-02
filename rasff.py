@@ -6,22 +6,39 @@ from io import BytesIO
 import requests
 import plotly.express as px
 
-# Load lists from external sources
-def load_list_from_github(file_name: str) -> List[str]:
-    base_url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/"
-    url = f"{base_url}{file_name}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.text.splitlines()
-    else:
-        st.error(f"Failed to load {file_name} from GitHub.")
-        return []
-
-hazard_categories = load_list_from_github("hazard_categories.py")
-hazards = load_list_from_github("hazards.py")
-notifying_countries = load_list_from_github("notifying_countries.py")
-origin_countries = load_list_from_github("origin_countries.py")
-product_categories = load_list_from_github("product_categories.py")
+# Hazard category mapping
+hazard_categories = {
+    "GMO / novel food": "OGM / nouveau aliment",
+    "TSEs": "EST",
+    "adulteration / fraud": "Adultération / fraude",
+    "allergens": "Allergènes",
+    "biological contaminants": "Contaminants biologiques",
+    "biotoxins (other)": "Biotoxines (autres)",
+    "chemical contamination (other)": "Contamination chimique (autres)",
+    "composition": "Composition",
+    "environmental pollutants": "Polluants environnementaux",
+    "feed additives": "Additifs pour l'alimentation animale",
+    "food additives and flavourings": "Additifs alimentaires et arômes",
+    "foreign bodies": "Corps étrangers",
+    "genetically modified": "Génétiquement modifié",
+    "heavy metals": "Métaux lourds",
+    "industrial contaminants": "Contaminants industriels",
+    "labelling absent/incomplete/incorrect": "Étiquetage absent/incomplet/incorrect",
+    "migration": "Migration",
+    "mycotoxins": "Mycotoxines",
+    "natural toxins (other)": "Toxines naturelles (autres)",
+    "non-pathogenic micro-organisms": "Micro-organismes non pathogènes",
+    "not determined (other)": "Non déterminé (autres)",
+    "novel food": "Nouveau aliment",
+    "organoleptic aspects": "Aspects organoleptiques",
+    "packaging defective / incorrect": "Emballage défectueux / incorrect",
+    "parasitic infestation": "Infestation parasitaire",
+    "pathogenic micro-organisms": "Micro-organismes pathogènes",
+    "pesticide residues": "Résidus de pesticides",
+    "poor or insufficient controls": "Contrôles insuffisants ou de mauvaise qualité",
+    "radiation": "Radiation",
+    "residues of veterinary medicinal": "Résidus de médicaments vétérinaires",
+}
 
 class RASFFDashboard:
     def __init__(self):
@@ -46,7 +63,10 @@ class RASFFDashboard:
         df['product_category'].fillna("Unknown", inplace=True)
         df['notification_from'].fillna("Unknown", inplace=True)
         df['country_origin'].fillna("Unknown", inplace=True)
-        
+
+        # Map hazard_category to its French equivalent if present in hazard_categories dictionary
+        df['hazard_category_mapped'] = df['hazard_category'].map(hazard_categories).fillna(df['hazard_category'])
+
         return df
 
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -70,14 +90,14 @@ class RASFFDashboard:
 
         # Multiselect filters
         selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].unique()))
-        selected_issues = st.sidebar.multiselect("Issue Types", sorted(df['hazard_category'].unique()))
+        selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category_mapped'].unique()))
         selected_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].unique()))
 
         # Apply additional filters
         if selected_categories:
             filtered_df = filtered_df[filtered_df['product_category'].isin(selected_categories)]
-        if selected_issues:
-            filtered_df = filtered_df[filtered_df['hazard_category'].isin(selected_issues)]
+        if selected_hazards:
+            filtered_df = filtered_df[filtered_df['hazard_category_mapped'].isin(selected_hazards)]
         if selected_countries:
             filtered_df = filtered_df[filtered_df['notification_from'].isin(selected_countries)]
 
@@ -88,7 +108,7 @@ class RASFFDashboard:
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Notifications", len(df))
         col2.metric("Unique Product Categories", df['product_category'].nunique())
-        col3.metric("Unique Hazard Categories", df['hazard_category'].nunique())
+        col3.metric("Unique Hazard Categories", df['hazard_category_mapped'].nunique())
 
     def display_visualizations(self, df: pd.DataFrame):
         st.header("Visualizations")
