@@ -1,90 +1,45 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from io import BytesIO
 import requests
+from io import BytesIO
 import datetime
-from typing import List
-import re
-import ast
 
-# Function to load list or dictionary directly from GitHub raw file
-def load_list_or_dict_from_github(filename: str):
-    base_url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/"
-    url = f"{base_url}{filename}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        content = response.text
-        try:
-            return ast.literal_eval(content.strip())  # Safely evaluate the string as Python code (list or dict)
-        except (SyntaxError, ValueError) as e:
-            st.error(f"Failed to parse {filename}: {e}")
-            return [] if filename.endswith("py") else {}
-    else:
-        st.error(f"Failed to load {filename} from GitHub.")
-        return [] if filename.endswith("py") else {}
-
-# Load lists and dictionaries from GitHub
-hazard_categories = load_list_or_dict_from_github("hazard_categories.py")
-notifying_countries = load_list_or_dict_from_github("notifying_countries.py")
-origin_countries = load_list_or_dict_from_github("origin_countries.py")
-product_categories = load_list_or_dict_from_github("product_categories.py")
-
-# Function to download and clean data from multiple weeks
-def telecharger_et_nettoyer_donnees(annee, semaines: List[int]) -> pd.DataFrame:
-    dfs = []
-    url_template = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
-
-    for semaine in semaines:
-        url = url_template.format(str(annee)[2:], annee, str(semaine).zfill(2))
-        response = requests.get(url)
-        if response.status_code == 200:
-            df = pd.read_excel(BytesIO(response.content))
-            dfs.append(df)
-        else:
-            st.error(f"Failed to download data for week {semaine}.")
-
-    if dfs:
-        df = pd.concat(dfs, ignore_index=True)
-        df = nettoyer_donnees(df)
+# Load the main CSV data from GitHub
+@st.cache_data
+def load_data(url: str) -> pd.DataFrame:
+    try:
+        df = pd.read_csv(url, parse_dates=['Date of Case'])
+        df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]  # Standardize column names
         return df
-    else:
+    except Exception as e:
+        st.error(f"Failed to load data: {e}")
         return pd.DataFrame()
 
-# Function to clean the main data
-def nettoyer_donnees(df: pd.DataFrame) -> pd.DataFrame:
-    df.columns = [col.lower().replace(" ", "_") for col in df.columns]
-    df['date'] = pd.to_datetime(df['date_of_case'], errors='coerce')
-    df = df.dropna(subset=['date'])
+# Simple function to clean the data and fill missing values if needed
+def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.dropna(subset=['date_of_case'])
+    df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
+    return df.dropna(subset=['date_of_case'])
 
-    # Standardize `notification_from` and `country_origin`
-    df['notification_from'] = df['notification_from'].apply(lambda x: re.sub(r"\s*\(.*\)", "", str(x)).strip())
-    df['country_origin'] = df['country_origin'].apply(lambda x: re.sub(r"\s*\(.*\)", "", str(x)).strip())
-
-    return df
-
-# Define the main dashboard class
+# Main class for the RASFF Dashboard
 class RASFFDashboard:
     def __init__(self, url: str):
-        self.data = self.load_and_clean_data(url)
-
-    def load_and_clean_data(self, url: str) -> pd.DataFrame:
-        df = pd.read_csv(url)
-        return nettoyer_donnees(df)
+        self.data = clean_data(load_data(url))
 
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
 
         # Date range filter
-        min_date, max_date = df['date'].min(), df['date'].max()
+        min_date, max_date = df['date_of_case'].min(), df['date_of_case'].max()
         date_range = st.sidebar.slider("Date Range", min_value=min_date, max_value=max_date, value=(min_date, max_date))
-        filtered_df = df[(df['date'] >= date_range[0]) & (df['date'] <= date_range[1])]
+        filtered_df = df[(df['date_of_case'] >= date_range[0]) & (df['date_of_case'] <= date_range[1])]
 
         # Multiselect filters
-        selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].unique()))
-        selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].unique()))
-        selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].unique()))
-        selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].unique()))
+        selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique()))
+        selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].dropna().unique()))
+        selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique()))
+        selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique()))
 
         # Apply filters
         if selected_categories:
@@ -142,19 +97,10 @@ class RASFFDashboard:
         st.plotly_chart(fig_pie)
 
     async def run(self):
-        st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
         st.title("RASFF Data Dashboard")
 
-        # Load initial data
-        url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv"
-        df = self.data if not self.data.empty else self.load_and_clean_data(url)
-
-        if df.empty:
-            st.error("No data available. Check the data source or URL.")
-            return
-
         # Sidebar filters
-        filtered_df = self.render_sidebar(df)
+        filtered_df = self.render_sidebar(self.data)
 
         # Display statistics
         self.display_statistics(filtered_df)
@@ -164,6 +110,7 @@ class RASFFDashboard:
 
 # Run the dashboard
 if __name__ == "__main__":
+    st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")  # Ensure this is the first Streamlit command
     dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv")
     import asyncio
     asyncio.run(dashboard.run())
