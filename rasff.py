@@ -20,7 +20,8 @@ def load_data(url: str) -> pd.DataFrame:
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=['date_of_case'])
     df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
-    return df.dropna(subset=['date_of_case'])
+    df = df.dropna(subset=['date_of_case'])  # Drop any rows with null dates after conversion
+    return df
 
 # Main class for the RASFF Dashboard
 class RASFFDashboard:
@@ -31,9 +32,16 @@ class RASFFDashboard:
         st.sidebar.header("Filter Options")
 
         # Date range filter
-        min_date, max_date = df['date_of_case'].min(), df['date_of_case'].max()
-        date_range = st.sidebar.slider("Date Range", min_value=min_date, max_value=max_date, value=(min_date, max_date))
-        filtered_df = df[(df['date_of_case'] >= date_range[0]) & (df['date_of_case'] <= date_range[1])]
+        min_date = df['date_of_case'].min().date()  # Convert to datetime.date
+        max_date = df['date_of_case'].max().date()  # Convert to datetime.date
+        date_range = st.sidebar.slider(
+            "Date Range", 
+            min_value=min_date, 
+            max_value=max_date, 
+            value=(min_date, max_date),
+            format="YYYY-MM-DD"
+        )
+        filtered_df = df[(df['date_of_case'] >= pd.to_datetime(date_range[0])) & (df['date_of_case'] <= pd.to_datetime(date_range[1]))]
 
         # Multiselect filters
         selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique()))
