@@ -18,11 +18,11 @@ def load_data(url: str) -> pd.DataFrame:
         st.error(f"Failed to load data: {e}")
         return pd.DataFrame()
 
-# Simple function to clean the data
+# Simple function to clean the data and fill missing values if needed
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=['date_of_case'])
     df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
-    df = df.dropna(subset=['date_of_case'])  # Drop rows with null dates after conversion
+    df = df.dropna(subset=['date_of_case'])  # Drop any rows with null dates after conversion
     return df
 
 # Main class for the RASFF Dashboard
@@ -30,11 +30,11 @@ class RASFFDashboard:
     def __init__(self, url: str):
         self.data = clean_data(load_data(url))
 
-    def render_sidebar(self, df: pd.DataFrame) -> (pd.DataFrame, str):
+    def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
-
-        # Page selection for navigation
-        page = st.sidebar.selectbox("Select Page", ["Dashboard", "RASFF Portal Lab"])
+        
+        # Sidebar for page navigation
+        page = st.sidebar.radio("Select Page", ["Dashboard", "RASFF Portal Lab"])
 
         # Date range filter
         min_date = df['date_of_case'].min().date()
@@ -113,14 +113,14 @@ class RASFFDashboard:
         st.title("RASFF Data Dashboard")
 
         # Sidebar filters
-        filtered_df, selected_page = self.render_sidebar(self.data)
+        filtered_df, page = self.render_sidebar(self.data)
 
-        # Page navigation logic
-        if selected_page == "Dashboard":
+        # Display page based on selection
+        if page == "Dashboard":
             self.display_statistics(filtered_df)
             self.display_visualizations(filtered_df)
-        elif selected_page == "RASFF Portal Lab":
-            display_rasff_portal_lab()  # Run the RASFF Portal Lab page content
+        elif page == "RASFF Portal Lab":
+            display_rasff_portal_lab()  # Load content from RASFFPortalLab.py
 
 # Run the dashboard
 if __name__ == "__main__":
