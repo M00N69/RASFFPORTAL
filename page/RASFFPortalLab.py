@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import requests
+import io  # Import io to use StringIO
 
 # Define a function to load the CSV data from the GitHub URL
 @st.cache_data  # Cache the data loading function to improve performance
@@ -9,7 +10,7 @@ def load_data_from_github():
     url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv"
     response = requests.get(url)
     if response.status_code == 200:
-        df = pd.read_csv(pd.compat.StringIO(response.text))
+        df = pd.read_csv(io.StringIO(response.text))  # Use io.StringIO to read the CSV text content
         return df
     else:
         st.error("Failed to load data from GitHub.")
