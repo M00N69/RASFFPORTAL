@@ -5,7 +5,13 @@ import requests
 from io import BytesIO
 import datetime
 import asyncio
-from page.RASFFPortalLab import display_rasff_portal_lab  # Import the function from RASFFPortalLab.py
+
+# Attempt to import the display function from page/RASFFPortalLab.py
+try:
+    from page.RASFFPortalLab import display_rasff_portal_lab  # Import the function
+except ModuleNotFoundError as e:
+    st.error("Could not load the RASFF Portal Lab page. Make sure `RASFFPortalLab.py` exists in the 'page' folder.")
+    display_rasff_portal_lab = None
 
 # Load the main CSV data from GitHub
 @st.cache_data
@@ -119,7 +125,7 @@ class RASFFDashboard:
         if page == "Dashboard":
             self.display_statistics(filtered_df)
             self.display_visualizations(filtered_df)
-        elif page == "RASFF Portal Lab":
+        elif page == "RASFF Portal Lab" and display_rasff_portal_lab:
             display_rasff_portal_lab()  # Load content from RASFFPortalLab.py
 
 # Run the dashboard
