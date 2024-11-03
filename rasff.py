@@ -1,16 +1,21 @@
 import streamlit as st
+
+# Set page configuration at the very start
+st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
+
 import pandas as pd
 import plotly.express as px
 import requests
 from io import BytesIO
 import datetime
 import asyncio
+import os
 
 # Attempt to import the display function from page/RASFFPortalLab.py
 try:
     from page.RASFFPortalLab import display_rasff_portal_lab  # Import the function
 except ModuleNotFoundError as e:
-    st.error("Could not load the RASFF Portal Lab page. Make sure `RASFFPortalLab.py` exists in the 'page' folder.")
+    st.warning("Could not load the RASFF Portal Lab page. Make sure `RASFFPortalLab.py` exists in the 'page' folder.")
     display_rasff_portal_lab = None
 
 # Load the main CSV data from GitHub
@@ -36,7 +41,7 @@ class RASFFDashboard:
     def __init__(self, url: str):
         self.data = clean_data(load_data(url))
 
-    def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
+    def render_sidebar(self, df: pd.DataFrame) -> (pd.DataFrame, str):
         st.sidebar.header("Filter Options")
         
         # Sidebar for page navigation
@@ -130,6 +135,5 @@ class RASFFDashboard:
 
 # Run the dashboard
 if __name__ == "__main__":
-    st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
     dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv")
     asyncio.run(dashboard.run())
