@@ -1,71 +1,34 @@
 import streamlit as st
-
-# Set page configuration at the very start
-st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
-
 import pandas as pd
 import plotly.express as px
-import requests
-from io import BytesIO
-import datetime
 import asyncio
-import os
+from page.RASFFPortalLab import display_rasff_portal_lab  # Import function from RASFFPortalLab.py
 
-# Attempt to import the display function from page/RASFFPortalLab.py
-try:
-    from page.RASFFPortalLab import display_rasff_portal_lab  # Import the function
-except ModuleNotFoundError as e:
-    st.warning("Could not load the RASFF Portal Lab page. Make sure `RASFFPortalLab.py` exists in the 'page' folder.")
-    display_rasff_portal_lab = None
-
-# Load the main CSV data from GitHub
-@st.cache_data
-def load_data(url: str) -> pd.DataFrame:
-    try:
-        df = pd.read_csv(url, parse_dates=['Date of Case'])
-        df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]  # Standardize column names
-        return df
-    except Exception as e:
-        st.error(f"Failed to load data: {e}")
-        return pd.DataFrame()
-
-# Simple function to clean the data and fill missing values if needed
-def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.dropna(subset=['date_of_case'])
-    df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
-    df = df.dropna(subset=['date_of_case'])  # Drop any rows with null dates after conversion
-    return df
+# Set the page configuration at the very beginning
+st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
 
 # Main class for the RASFF Dashboard
 class RASFFDashboard:
     def __init__(self, url: str):
-        self.data = clean_data(load_data(url))
+        self.data = self.load_data(url)
 
-    def render_sidebar(self, df: pd.DataFrame) -> (pd.DataFrame, str):
+    @st.cache_data
+    def load_data(self, url: str) -> pd.DataFrame:
+        df = pd.read_csv(url, parse_dates=['Date of Case'])
+        df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]  # Standardize column names
+        return df
+
+    def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
-        
-        # Sidebar for page navigation
-        page = st.sidebar.radio("Select Page", ["Dashboard", "RASFF Portal Lab"])
 
-        # Date range filter
-        min_date = df['date_of_case'].min().date()
-        max_date = df['date_of_case'].max().date()
-        date_range = st.sidebar.slider(
-            "Date Range", 
-            min_value=min_date, 
-            max_value=max_date, 
-            value=(min_date, max_date),
-            format="YYYY-MM-DD"
-        )
-        filtered_df = df[(df['date_of_case'] >= pd.to_datetime(date_range[0])) & (df['date_of_case'] <= pd.to_datetime(date_range[1]))]
-
-        # Multiselect filters
+        # Multiselect filters (excluding date filters)
         selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique()))
         selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].dropna().unique()))
         selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique()))
         selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique()))
 
         # Apply filters
+        filtered_df = df.copy()
         if selected_categories:
             filtered_df = filtered_df[filtered_df['product_category'].isin(selected_categories)]
         if selected_hazards:
@@ -75,7 +38,7 @@ class RASFFDashboard:
         if selected_origin_countries:
             filtered_df = filtered_df[filtered_df['country_origin'].isin(selected_origin_countries)]
 
-        return filtered_df, page
+        return filtered_df
 
     def display_statistics(self, df: pd.DataFrame):
         st.header("Key Statistics")
@@ -124,16 +87,20 @@ class RASFFDashboard:
         st.title("RASFF Data Dashboard")
 
         # Sidebar filters
-        filtered_df, page = self.render_sidebar(self.data)
+        filtered_df = self.render_sidebar(self.data)
 
-        # Display page based on selection
-        if page == "Dashboard":
-            self.display_statistics(filtered_df)
-            self.display_visualizations(filtered_df)
-        elif page == "RASFF Portal Lab" and display_rasff_portal_lab:
-            display_rasff_portal_lab()  # Load content from RASFFPortalLab.py
+        # Display statistics
+        self.display_statistics(filtered_df)
 
-# Run the dashboard
+        # Display visualizations
+        self.display_visualizations(filtered_df)
+
+# Run the dashboard or load the additional lab page
 if __name__ == "__main__":
     dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv")
-    asyncio.run(dashboard.run())
+    page = st.sidebar.radio("Select Page", ["Dashboard", "RASFF Portal Lab"])
+
+    if page == "Dashboard":
+        asyncio.run(dashboard.run())
+    elif page == "RASFF Portal Lab":
+        display_rasff_portal_lab()
