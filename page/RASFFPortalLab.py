@@ -7,7 +7,7 @@ import io
 # Function to load data from GitHub
 @st.cache_data
 def load_data_from_github():
-    url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv"
+    url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv"
     response = requests.get(url)
     if response.status_code == 200:
         df = pd.read_csv(io.StringIO(response.text))
