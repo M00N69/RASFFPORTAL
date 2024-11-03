@@ -2,15 +2,15 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import requests
-import io  # Import io to use StringIO
+import io
 
-# Define a function to load the CSV data from the GitHub URL
-@st.cache_data  # Cache the data loading function to improve performance
+# Function to load data from GitHub
+@st.cache_data
 def load_data_from_github():
     url = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv"
     response = requests.get(url)
     if response.status_code == 200:
-        df = pd.read_csv(io.StringIO(response.text))  # Use io.StringIO to read the CSV text content
+        df = pd.read_csv(io.StringIO(response.text))
         return df
     else:
         st.error("Failed to load data from GitHub.")
@@ -22,9 +22,22 @@ def display_rasff_portal_lab():
     # Load the data from GitHub
     df = load_data_from_github()
 
-    # Check if data was loaded successfully
+    # Preview the data to debug column names
     if df.empty:
         st.warning("No data available. Please check the data source.")
+        return
+    
+    st.write("Data Preview:")
+    st.write(df.head())  # Display the first few rows to verify data
+
+    # Display column names for troubleshooting
+    st.write("Column Names:", df.columns.tolist())
+
+    # Check if necessary columns exist
+    required_columns = ['Notification From', 'Country Origin', 'GROUPPROD', 'GROUPHAZ', 'PRODCAT', 'HAZCAT', 'Hazard Substance']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        st.error(f"Missing columns in the data: {missing_columns}")
         return
 
     # Sidebar filters (excluding date filters)
