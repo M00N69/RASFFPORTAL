@@ -5,7 +5,7 @@ import requests
 from io import BytesIO
 import datetime
 import asyncio
-from RASFFPortalLab import display_rasff_portal_lab  # Import the function from RASFFPortalLab.py
+from page.RASFFPortalLab import display_rasff_portal_lab  # Import the function from RASFFPortalLab.py
 
 # Load the main CSV data from GitHub
 @st.cache_data
