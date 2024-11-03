@@ -4,6 +4,7 @@ import plotly.express as px
 import requests
 from io import BytesIO
 import datetime
+import asyncio
 
 # Load the main CSV data from GitHub
 @st.cache_data
@@ -16,12 +17,18 @@ def load_data(url: str) -> pd.DataFrame:
         st.error(f"Failed to load data: {e}")
         return pd.DataFrame()
 
-# Simple function to clean the data and fill missing values if needed
+# Simple function to clean the data
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=['date_of_case'])
     df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
-    df = df.dropna(subset=['date_of_case'])  # Drop any rows with null dates after conversion
+    df = df.dropna(subset=['date_of_case'])  # Drop rows with null dates after conversion
     return df
+
+# Define functions for additional pages (example for RASFFPortalLab)
+def display_rasff_portal_lab():
+    st.header("RASFF Portal Lab")
+    st.write("This is the content for the RASFF Portal Lab page.")
+    # Additional content specific to RASFFPortalLab
 
 # Main class for the RASFF Dashboard
 class RASFFDashboard:
@@ -31,9 +38,12 @@ class RASFFDashboard:
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
 
-        # Date range filter
-        min_date = df['date_of_case'].min().date()  # Convert to datetime.date
-        max_date = df['date_of_case'].max().date()  # Convert to datetime.date
+        # Page selection for navigation
+        page = st.sidebar.selectbox("Select Page", ["Dashboard", "RASFF Portal Lab"])
+
+        # Date range filter (removed if date is causing issues)
+        min_date = df['date_of_case'].min().date()
+        max_date = df['date_of_case'].max().date()
         date_range = st.sidebar.slider(
             "Date Range", 
             min_value=min_date, 
@@ -59,7 +69,7 @@ class RASFFDashboard:
         if selected_origin_countries:
             filtered_df = filtered_df[filtered_df['country_origin'].isin(selected_origin_countries)]
 
-        return filtered_df
+        return filtered_df, page
 
     def display_statistics(self, df: pd.DataFrame):
         st.header("Key Statistics")
@@ -108,17 +118,17 @@ class RASFFDashboard:
         st.title("RASFF Data Dashboard")
 
         # Sidebar filters
-        filtered_df = self.render_sidebar(self.data)
+        filtered_df, selected_page = self.render_sidebar(self.data)
 
-        # Display statistics
-        self.display_statistics(filtered_df)
-
-        # Display visualizations
-        self.display_visualizations(filtered_df)
+        # Page navigation logic
+        if selected_page == "Dashboard":
+            self.display_statistics(filtered_df)
+            self.display_visualizations(filtered_df)
+        elif selected_page == "RASFF Portal Lab":
+            display_rasff_portal_lab()
 
 # Run the dashboard
 if __name__ == "__main__":
-    st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")  # Ensure this is the first Streamlit command
+    st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
     dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv")
-    import asyncio
     asyncio.run(dashboard.run())
