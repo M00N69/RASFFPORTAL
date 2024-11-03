@@ -7,14 +7,18 @@ from page.RASFFPortalLab import display_rasff_portal_lab  # Import function from
 # Set the page configuration at the very beginning
 st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
 
+# URL to the CSV file (hard-coded for cache compatibility)
+DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv"
+
 # Main class for the RASFF Dashboard
 class RASFFDashboard:
-    def __init__(self, url: str):
-        self.data = self.load_data(url)
+    def __init__(self):
+        # Removed url parameter, using a hardcoded DATA_URL
+        self.data = self.load_data()
 
-    @st.cache_data
-    def load_data(self, url: str) -> pd.DataFrame:
-        df = pd.read_csv(url, parse_dates=['Date of Case'])
+    def load_data(self) -> pd.DataFrame:
+        # Removed caching to avoid issues with unhashable URL
+        df = pd.read_csv(DATA_URL, parse_dates=['Date of Case'])
         df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]  # Standardize column names
         return df
 
@@ -97,7 +101,7 @@ class RASFFDashboard:
 
 # Run the dashboard or load the additional lab page
 if __name__ == "__main__":
-    dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv")
+    dashboard = RASFFDashboard()
     page = st.sidebar.radio("Select Page", ["Dashboard", "RASFF Portal Lab"])
 
     if page == "Dashboard":
