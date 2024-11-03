@@ -1,86 +1,139 @@
 import streamlit as st
+
+# Set page configuration at the very start
+st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
+
 import pandas as pd
 import plotly.express as px
+import requests
+from io import BytesIO
+import datetime
+import asyncio
+import os
 
-# Set up the Streamlit page
-st.set_page_config(page_title="RASFF Data Analysis", layout="wide")
-st.title("RASFF Data Analysis Dashboard")
+# Attempt to import the display function from page/RASFFPortalLab.py
+try:
+    from page.RASFFPortalLab import display_rasff_portal_lab  # Import the function
+except ModuleNotFoundError as e:
+    st.warning("Could not load the RASFF Portal Lab page. Make sure `RASFFPortalLab.py` exists in the 'page' folder.")
+    display_rasff_portal_lab = None
 
-# Upload CSV File
-uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
+# Load the main CSV data from GitHub
+@st.cache_data
+def load_data(url: str) -> pd.DataFrame:
+    try:
+        df = pd.read_csv(url, parse_dates=['Date of Case'])
+        df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]  # Standardize column names
+        return df
+    except Exception as e:
+        st.error(f"Failed to load data: {e}")
+        return pd.DataFrame()
 
-if uploaded_file:
-    # Load the CSV data
-    df = pd.read_csv(uploaded_file)
+# Simple function to clean the data and fill missing values if needed
+def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.dropna(subset=['date_of_case'])
+    df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
+    df = df.dropna(subset=['date_of_case'])  # Drop any rows with null dates after conversion
+    return df
 
-    # Sidebar filters (excluding date filters)
-    st.sidebar.header("Filters")
+# Main class for the RASFF Dashboard
+class RASFFDashboard:
+    def __init__(self, url: str):
+        self.data = clean_data(load_data(url))
 
-    # Notification Country filter
-    notification_country = st.sidebar.multiselect("Notification Country", options=df['Notification From'].unique())
-    if notification_country:
-        df = df[df['Notification From'].isin(notification_country)]
+    def render_sidebar(self, df: pd.DataFrame) -> (pd.DataFrame, str):
+        st.sidebar.header("Filter Options")
+        
+        # Sidebar for page navigation
+        page = st.sidebar.radio("Select Page", ["Dashboard", "RASFF Portal Lab"])
 
-    # Country of Origin filter
-    origin_country = st.sidebar.multiselect("Country of Origin", options=df['Country Origin'].unique())
-    if origin_country:
-        df = df[df['Country Origin'].isin(origin_country)]
+        # Date range filter
+        min_date = df['date_of_case'].min().date()
+        max_date = df['date_of_case'].max().date()
+        date_range = st.sidebar.slider(
+            "Date Range", 
+            min_value=min_date, 
+            max_value=max_date, 
+            value=(min_date, max_date),
+            format="YYYY-MM-DD"
+        )
+        filtered_df = df[(df['date_of_case'] >= pd.to_datetime(date_range[0])) & (df['date_of_case'] <= pd.to_datetime(date_range[1]))]
 
-    # Group Product filter
-    group_prod = st.sidebar.multiselect("Group Product Category", options=df['GROUPPROD'].unique())
-    if group_prod:
-        df = df[df['GROUPPROD'].isin(group_prod)]
+        # Multiselect filters
+        selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique()))
+        selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].dropna().unique()))
+        selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique()))
+        selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique()))
 
-    # Group Hazard filter
-    group_haz = st.sidebar.multiselect("Group Hazard Category", options=df['GROUPHAZ'].unique())
-    if group_haz:
-        df = df[df['GROUPHAZ'].isin(group_haz)]
+        # Apply filters
+        if selected_categories:
+            filtered_df = filtered_df[filtered_df['product_category'].isin(selected_categories)]
+        if selected_hazards:
+            filtered_df = filtered_df[filtered_df['hazard_category'].isin(selected_hazards)]
+        if selected_notifying_countries:
+            filtered_df = filtered_df[filtered_df['notification_from'].isin(selected_notifying_countries)]
+        if selected_origin_countries:
+            filtered_df = filtered_df[filtered_df['country_origin'].isin(selected_origin_countries)]
 
-    # Main dashboard metrics
-    st.subheader("Key Statistics")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Notifications", len(df))
-    col2.metric("Unique Product Categories", df['PRODCAT'].nunique())
-    col3.metric("Unique Hazard Categories", df['HAZCAT'].nunique())
+        return filtered_df, page
 
-    st.subheader("Data Visualizations")
+    def display_statistics(self, df: pd.DataFrame):
+        st.header("Key Statistics")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Notifications", len(df))
+        col2.metric("Unique Product Categories", df['product_category'].nunique())
+        col3.metric("Unique Hazard Categories", df['hazard_category'].nunique())
 
-    # Notifications by Notification Country
-    st.write("### Notifications by Notification Country")
-    country_notifications = df['Notification From'].value_counts().reset_index()
-    country_notifications.columns = ['Notification Country', 'Count']
-    fig_country_notifications = px.bar(country_notifications, x='Notification Country', y='Count', title="Notifications by Country")
-    st.plotly_chart(fig_country_notifications, use_container_width=True)
+    def display_visualizations(self, df: pd.DataFrame):
+        st.header("Visualizations")
 
-    # Product Categories Distribution
-    st.write("### Distribution of Product Categories")
-    product_category_count = df['PRODCAT'].value_counts().reset_index()
-    product_category_count.columns = ['Product Category', 'Count']
-    fig_product_categories = px.pie(product_category_count, names='Product Category', values='Count', title="Product Categories")
-    st.plotly_chart(fig_product_categories, use_container_width=True)
+        # European Map for Notifying Countries
+        fig_notifying_map = px.choropleth(
+            df.groupby('notification_from').size().reset_index(name='count'),
+            locations='notification_from',
+            locationmode='country names',
+            color='count',
+            scope="europe",
+            title="European Map of Notifying Countries",
+            color_continuous_scale='Blues'
+        )
+        st.plotly_chart(fig_notifying_map)
 
-    # Hazard Categories Breakdown
-    st.write("### Hazard Categories")
-    hazard_category_count = df['HAZCAT'].value_counts().reset_index()
-    hazard_category_count.columns = ['Hazard Category', 'Count']
-    fig_hazard_categories = px.bar(hazard_category_count, x='Hazard Category', y='Count', title="Hazard Categories Breakdown")
-    st.plotly_chart(fig_hazard_categories, use_container_width=True)
+        # World Map for Origin Countries
+        fig_origin_map = px.choropleth(
+            df.groupby('country_origin').size().reset_index(name='count'),
+            locations='country_origin',
+            locationmode='country names',
+            color='count',
+            title="World Map of Origin Countries",
+            color_continuous_scale='Reds'
+        )
+        st.plotly_chart(fig_origin_map)
 
-    # Detailed breakdown for specific categories (drill-down)
-    st.write("## Detailed Analysis")
+        # Bar Chart for Product Categories
+        product_counts = df['product_category'].value_counts().head(10)
+        fig_bar = px.bar(product_counts, x=product_counts.index, y=product_counts.values, title="Top Product Categories")
+        st.plotly_chart(fig_bar)
 
-    # Select Group Hazard and Hazard Category for detailed analysis
-    selected_group_haz = st.selectbox("Select Group Hazard for Detailed Analysis", options=df['GROUPHAZ'].unique())
-    detailed_haz_df = df[df['GROUPHAZ'] == selected_group_haz]
-    selected_haz_cat = st.selectbox("Select Hazard Category within Group", options=detailed_haz_df['HAZCAT'].unique())
+        # Pie Chart for Top Hazard Categories
+        hazard_counts = df['hazard_category'].value_counts().head(10)
+        fig_pie = px.pie(hazard_counts, values=hazard_counts.values, names=hazard_counts.index, title="Top 10 Hazard Categories")
+        st.plotly_chart(fig_pie)
 
-    # Drill-down into specific hazard substance
-    detailed_haz_cat_df = detailed_haz_df[detailed_haz_df['HAZCAT'] == selected_haz_cat]
-    hazard_substance_count = detailed_haz_cat_df['Hazard Substance'].value_counts().reset_index()
-    hazard_substance_count.columns = ['Hazard Substance', 'Count']
-    fig_hazard_substance = px.bar(hazard_substance_count, x='Hazard Substance', y='Count', title=f"Hazard Substances in {selected_haz_cat}")
-    st.plotly_chart(fig_hazard_substance, use_container_width=True)
+    async def run(self):
+        st.title("RASFF Data Dashboard")
 
-else:
-    st.info("Please upload a CSV file to proceed.")
+        # Sidebar filters
+        filtered_df, page = self.render_sidebar(self.data)
 
+        # Display page based on selection
+        if page == "Dashboard":
+            self.display_statistics(filtered_df)
+            self.display_visualizations(filtered_df)
+        elif page == "RASFF Portal Lab" and display_rasff_portal_lab:
+            display_rasff_portal_lab()  # Load content from RASFFPortalLab.py
+
+# Run the dashboard
+if __name__ == "__main__":
+    dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv")
+    asyncio.run(dashboard.run())
