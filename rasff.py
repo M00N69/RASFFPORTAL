@@ -1,37 +1,93 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import requests
+from io import BytesIO
 import asyncio
-from page.RASFFPortalLab import display_rasff_portal_lab  # Import function from RASFFPortalLab.py
+from page.RASFFPortalLab import display_rasff_portal_lab
+import os
 
-# Set the page configuration at the very beginning
+# Set the page configuration
 st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
 
-# URL to the CSV file (hard-coded for cache compatibility)
-DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv"
+# Local file to store the RASFF data
+DATA_URL = "rasff_data.csv"  
 
-# Main class for the RASFF Dashboard
 class RASFFDashboard:
     def __init__(self):
-        # Removed url parameter, using a hardcoded DATA_URL
         self.data = self.load_data()
 
     def load_data(self) -> pd.DataFrame:
-        # Removed caching to avoid issues with unhashable URL
-        df = pd.read_csv(DATA_URL, parse_dates=['Date of Case'])
-        df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]  # Standardize column names
+        """Loads and returns the CSV data as a DataFrame."""
+        if os.path.exists(DATA_URL):
+            df = pd.read_csv(DATA_URL, parse_dates=['date_of_case'])
+            df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]
+        else:
+            st.warning("Data file not found. Please check the path.")
+            df = pd.DataFrame()
         return df
+
+    def telecharger_et_nettoyer_donnees(self, annee, semaines) -> pd.DataFrame:
+        """Downloads and cleans data for specified year and weeks."""
+        dfs = []
+        url_template = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
+        
+        for semaine in semaines:
+            url = url_template.format(str(annee)[2:], annee, str(semaine).zfill(2))
+            response = requests.get(url)
+            if response.status_code == 200:
+                df = pd.read_excel(BytesIO(response.content))
+                dfs.append(df)
+            else:
+                st.error(f"Échec du téléchargement des données pour la semaine {semaine}.")
+        
+        if dfs:
+            df = pd.concat(dfs, ignore_index=True)
+            df = self.nettoyer_donnees(df)
+            return df
+        else:
+            return pd.DataFrame()  # Return an empty DataFrame if no files could be downloaded
+
+    def nettoyer_donnees(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Cleans the downloaded data to match the existing data format."""
+        # Standardize column names and ensure compatibility with the main CSV
+        df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]
+        df = df.rename(columns={
+            "date_case": "date_of_case",
+            "product_category": "product_category",
+            "hazard_category": "hazard_category",
+            "notification_from": "notification_from",
+            "country_origin": "country_origin"
+        })
+        
+        # Ensure date format is consistent
+        df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
+        
+        return df
+
+    def update_csv_with_latest_data(self, annee, semaines):
+        """Appends the latest data for the given year and weeks to the CSV file."""
+        new_data = self.telecharger_et_nettoyer_donnees(annee, semaines)
+        if not new_data.empty:
+            # Append new data to CSV
+            if os.path.exists(DATA_URL):
+                new_data.to_csv(DATA_URL, mode='a', header=False, index=False)
+            else:
+                new_data.to_csv(DATA_URL, mode='w', header=True, index=False)
+            st.success("Data updated successfully!")
+            # Reload data to reflect the new entries in the dashboard
+            self.data = self.load_data()
+        else:
+            st.error("No new data was downloaded to update the CSV.")
 
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
 
-        # Multiselect filters (excluding date filters)
         selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique()))
         selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].dropna().unique()))
         selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique()))
         selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique()))
 
-        # Apply filters
         filtered_df = df.copy()
         if selected_categories:
             filtered_df = filtered_df[filtered_df['product_category'].isin(selected_categories)]
@@ -54,7 +110,6 @@ class RASFFDashboard:
     def display_visualizations(self, df: pd.DataFrame):
         st.header("Visualizations")
 
-        # European Map for Notifying Countries
         fig_notifying_map = px.choropleth(
             df.groupby('notification_from').size().reset_index(name='count'),
             locations='notification_from',
@@ -66,7 +121,6 @@ class RASFFDashboard:
         )
         st.plotly_chart(fig_notifying_map)
 
-        # World Map for Origin Countries
         fig_origin_map = px.choropleth(
             df.groupby('country_origin').size().reset_index(name='count'),
             locations='country_origin',
@@ -77,18 +131,26 @@ class RASFFDashboard:
         )
         st.plotly_chart(fig_origin_map)
 
-        # Bar Chart for Product Categories
         product_counts = df['product_category'].value_counts().head(10)
         fig_bar = px.bar(product_counts, x=product_counts.index, y=product_counts.values, title="Top Product Categories")
         st.plotly_chart(fig_bar)
 
-        # Pie Chart for Top Hazard Categories
         hazard_counts = df['hazard_category'].value_counts().head(10)
         fig_pie = px.pie(hazard_counts, values=hazard_counts.values, names=hazard_counts.index, title="Top 10 Hazard Categories")
         st.plotly_chart(fig_pie)
 
     async def run(self):
         st.title("RASFF Data Dashboard")
+
+        # Sidebar for updating data
+        with st.sidebar:
+            st.header("Update Data")
+            annee = st.number_input("Year", min_value=2000, max_value=2100, value=2024, step=1)
+            semaines = st.text_input("Weeks (comma-separated)", "1,2,3")  # Input weeks as "1,2,3"
+            semaines = [int(week.strip()) for week in semaines.split(",")]
+
+            if st.button("Update Data"):
+                self.update_csv_with_latest_data(annee, semaines)
 
         # Sidebar filters
         filtered_df = self.render_sidebar(self.data)
