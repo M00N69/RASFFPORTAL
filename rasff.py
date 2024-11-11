@@ -53,16 +53,23 @@ class RASFFDashboard:
         # Standardize column names and ensure compatibility with the main CSV
         df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]
         df = df.rename(columns={
-            "date_case": "date_of_case",
-            "product_category": "product_category",
-            "hazard_category": "hazard_category",
-            "notification_from": "notification_from",
-            "country_origin": "country_origin"
+            "date": "date_of_case",
+            "category": "product_category",
+            "hazards": "hazard_category",
+            "notifying_country": "notification_from",
+            "origin": "country_origin"
         })
         
-        # Ensure date format is consistent
-        df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
+        # Ensure date format is consistent and only extract the date part
+        df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce').dt.date
         
+        # Select only relevant columns to match the CSV structure
+        expected_columns = ['date_of_case', 'product_category', 'hazard_category', 
+                            'notification_from', 'country_origin']
+        df = df[expected_columns]
+        
+        # Fill any missing values with placeholder if necessary
+        df = df.fillna("N/A")
         return df
 
     def update_csv_with_latest_data(self, annee, semaines):
