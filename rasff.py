@@ -12,7 +12,7 @@ class RASFFDashboard:
         if not self.data.empty:
             st.write("Data loaded and columns standardized. Here are the first few rows:")
             st.write(self.data.head())
-            st.write("Columns in the loaded data:", self.data.columns)
+            st.write("Columns in the loaded data:", list(self.data.columns))
         else:
             st.warning("Data failed to load or is empty.")
     
@@ -38,3 +38,8 @@ class RASFFDashboard:
         df = df.rename(columns=column_mapping)
         
         return df
+
+# Instantiate the class to run the loading and display process
+if __name__ == "__main__":
+    st.title("RASFF Data Dashboard - Step 1: Load and Inspect Data")
+    dashboard = RASFFDashboard()
