@@ -44,8 +44,23 @@ class RASFFDashboard:
         critical_columns = ['date_of_case', 'notification_from', 'country_origin', 'product_category', 'hazard_category']
         df[critical_columns] = df[critical_columns].fillna("N/A")
         
+        # Clean up the hazard_category column
+        df['hazard_category'] = df['hazard_category'].apply(self.clean_hazard_category)
+        
         return df
     
+    def clean_hazard_category(self, hazard):
+        """Split and return the primary hazard category."""
+        # Split on ";" and return the first unique category in case of multiple values
+        if pd.isna(hazard) or hazard == "N/A":
+            return "N/A"
+        
+        # Take only unique values
+        unique_hazards = set(hazard.split(";"))
+        
+        # Option 1: Join them back for display, or just take the first category
+        return "; ".join(sorted(unique_hazards))  # sorted to ensure consistent order in lists
+
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         """Set up filters in the sidebar and return filtered data."""
         st.sidebar.header("Filter Options")
@@ -93,5 +108,5 @@ class RASFFDashboard:
 
 # Instantiate the class to run the filtering and display process
 if __name__ == "__main__":
-    st.title("RASFF Data Dashboard - Step 3: Set Up Filters and Display Statistics")
+    st.title("RASFF Data Dashboard - Hazard Category Grouping")
     dashboard = RASFFDashboard()
