@@ -22,6 +22,14 @@ class RASFFDashboard:
         if os.path.exists(DATA_URL):
             df = pd.read_csv(DATA_URL, parse_dates=['date_of_case'])
             df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]
+            
+            # Check for missing expected columns
+            expected_columns = {'date_of_case', 'product_category', 'hazard_category', 
+                                'notification_from', 'country_origin'}
+            missing_columns = expected_columns - set(df.columns)
+            if missing_columns:
+                st.error(f"Missing columns in the CSV file: {missing_columns}")
+                return pd.DataFrame()  # Return an empty DataFrame if columns are missing
         else:
             st.warning("Data file not found. Please check the path.")
             df = pd.DataFrame()
@@ -39,7 +47,7 @@ class RASFFDashboard:
                 df = pd.read_excel(BytesIO(response.content))
                 dfs.append(df)
             else:
-                st.error(f"Échec du téléchargement des données pour la semaine {semaine}.")
+                st.error(f"Failed to download data for week {semaine}.")
         
         if dfs:
             df = pd.concat(dfs, ignore_index=True)
@@ -90,10 +98,15 @@ class RASFFDashboard:
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
 
-        selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique()))
-        selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].dropna().unique()))
-        selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique()))
-        selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique()))
+        if df.empty:
+            st.error("No data available to display filters.")
+            return df
+
+        # Safely attempt to access columns; if missing, skip filtering
+        selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique())) if 'product_category' in df else []
+        selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].dropna().unique())) if 'hazard_category' in df else []
+        selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique())) if 'notification_from' in df else []
+        selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique())) if 'country_origin' in df else []
 
         filtered_df = df.copy()
         if selected_categories:
@@ -111,40 +124,44 @@ class RASFFDashboard:
         st.header("Key Statistics")
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Notifications", len(df))
-        col2.metric("Unique Product Categories", df['product_category'].nunique())
-        col3.metric("Unique Hazard Categories", df['hazard_category'].nunique())
+        col2.metric("Unique Product Categories", df['product_category'].nunique() if 'product_category' in df else 0)
+        col3.metric("Unique Hazard Categories", df['hazard_category'].nunique() if 'hazard_category' in df else 0)
 
     def display_visualizations(self, df: pd.DataFrame):
         st.header("Visualizations")
 
-        fig_notifying_map = px.choropleth(
-            df.groupby('notification_from').size().reset_index(name='count'),
-            locations='notification_from',
-            locationmode='country names',
-            color='count',
-            scope="europe",
-            title="European Map of Notifying Countries",
-            color_continuous_scale='Blues'
-        )
-        st.plotly_chart(fig_notifying_map)
+        if 'notification_from' in df:
+            fig_notifying_map = px.choropleth(
+                df.groupby('notification_from').size().reset_index(name='count'),
+                locations='notification_from',
+                locationmode='country names',
+                color='count',
+                scope="europe",
+                title="European Map of Notifying Countries",
+                color_continuous_scale='Blues'
+            )
+            st.plotly_chart(fig_notifying_map)
 
-        fig_origin_map = px.choropleth(
-            df.groupby('country_origin').size().reset_index(name='count'),
-            locations='country_origin',
-            locationmode='country names',
-            color='count',
-            title="World Map of Origin Countries",
-            color_continuous_scale='Reds'
-        )
-        st.plotly_chart(fig_origin_map)
+        if 'country_origin' in df:
+            fig_origin_map = px.choropleth(
+                df.groupby('country_origin').size().reset_index(name='count'),
+                locations='country_origin',
+                locationmode='country names',
+                color='count',
+                title="World Map of Origin Countries",
+                color_continuous_scale='Reds'
+            )
+            st.plotly_chart(fig_origin_map)
 
-        product_counts = df['product_category'].value_counts().head(10)
-        fig_bar = px.bar(product_counts, x=product_counts.index, y=product_counts.values, title="Top Product Categories")
-        st.plotly_chart(fig_bar)
+        if 'product_category' in df:
+            product_counts = df['product_category'].value_counts().head(10)
+            fig_bar = px.bar(product_counts, x=product_counts.index, y=product_counts.values, title="Top Product Categories")
+            st.plotly_chart(fig_bar)
 
-        hazard_counts = df['hazard_category'].value_counts().head(10)
-        fig_pie = px.pie(hazard_counts, values=hazard_counts.values, names=hazard_counts.index, title="Top 10 Hazard Categories")
-        st.plotly_chart(fig_pie)
+        if 'hazard_category' in df:
+            hazard_counts = df['hazard_category'].value_counts().head(10)
+            fig_pie = px.pie(hazard_counts, values=hazard_counts.values, names=hazard_counts.index, title="Top 10 Hazard Categories")
+            st.plotly_chart(fig_pie)
 
     async def run(self):
         st.title("RASFF Data Dashboard")
