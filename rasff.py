@@ -5,7 +5,7 @@ import requests
 from io import BytesIO
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from page.RASFFPortalLab import display_rasff_portal_lab
 
 # Set the page configuration
@@ -24,19 +24,34 @@ class RASFFDashboard:
         if not os.path.exists(LOCAL_CSV):
             # Download the CSV file from URL if not present locally
             try:
-                df = pd.read_csv(DATA_URL, parse_dates=['date_of_case'])
+                df = pd.read_csv(DATA_URL)
                 df.to_csv(LOCAL_CSV, index=False)  # Save locally for caching
             except Exception as e:
                 st.error(f"Failed to load data from the URL: {e}")
                 return pd.DataFrame()
         else:
-            df = pd.read_csv(LOCAL_CSV, parse_dates=['date_of_case'])
+            df = pd.read_csv(LOCAL_CSV)
         
         # Standardize column names
         df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]
+
+        # Rename columns to match expected format if necessary
+        column_mapping = {
+            "date": "date_of_case",
+            "category": "product_category",
+            "hazards": "hazard_category",
+            "notifying_country": "notification_from",
+            "origin": "country_origin"
+        }
+        df = df.rename(columns=column_mapping)
         
+        # Check for and parse dates if `date_of_case` column is available
+        if 'date_of_case' in df.columns:
+            df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
+
         # Ensure expected columns exist
-        expected_columns = {'date_of_case', 'product_category', 'hazard_category', 'notification_from', 'country_origin'}
+        expected_columns = {'date_of_case', 'product_category', 'hazard_category', 
+                            'notification_from', 'country_origin'}
         missing_columns = expected_columns - set(df.columns)
         if missing_columns:
             st.error(f"Missing columns in the CSV file: {missing_columns}")
@@ -91,7 +106,9 @@ class RASFFDashboard:
             "origin": "country_origin"
         })
         
-        df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce').dt.date
+        if 'date_of_case' in df.columns:
+            df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
+        
         expected_columns = ['date_of_case', 'product_category', 'hazard_category', 'notification_from', 'country_origin']
         df = df[expected_columns]
         df = df.fillna("N/A")
@@ -137,7 +154,6 @@ class RASFFDashboard:
     async def run(self):
         st.title("RASFF Data Dashboard")
 
-        # Check for missing weeks and prompt user
         missing_weeks, last_available_week = self.get_missing_weeks()
         st.sidebar.write(f"Last available week: {last_available_week}")
         if missing_weeks:
