@@ -10,14 +10,15 @@ class RASFFDashboard:
         
         # Inspect the loaded data
         if not self.data.empty:
-            st.write("Data loaded and columns standardized. Here are the first few rows:")
+            st.write("Data loaded successfully with standardized columns.")
+            st.write("Here are the first few rows after parsing dates and handling missing values:")
             st.write(self.data.head())
             st.write("Columns in the loaded data:", list(self.data.columns))
         else:
             st.warning("Data failed to load or is empty.")
     
     def load_data(self) -> pd.DataFrame:
-        """Loads data from a URL and returns it as a standardized DataFrame."""
+        """Loads data from a URL, standardizes columns, parses dates, and handles missing values."""
         try:
             df = pd.read_csv(DATA_URL)
         except Exception as e:
@@ -37,9 +38,18 @@ class RASFFDashboard:
         }
         df = df.rename(columns=column_mapping)
         
+        # Parse the date_of_case column as a date
+        if 'date_of_case' in df.columns:
+            df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
+        
+        # Handle missing values by filling with "N/A" for critical columns
+        critical_columns = ['date_of_case', 'notification_from', 'country_origin', 'product_category', 'hazard_category']
+        df[critical_columns] = df[critical_columns].fillna("N/A")
+        
         return df
 
-# Instantiate the class to run the loading and display process
+# Instantiate the class to run the loading, date parsing, and missing value handling
 if __name__ == "__main__":
-    st.title("RASFF Data Dashboard - Step 1: Load and Inspect Data")
+    st.title("RASFF Data Dashboard - Step 2: Parse Dates and Handle Missing Values")
     dashboard = RASFFDashboard()
+
