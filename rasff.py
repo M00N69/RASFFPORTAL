@@ -8,12 +8,10 @@ class RASFFDashboard:
     def __init__(self):
         self.data = self.load_data()
         
-        # Inspect the loaded data
+        # Check if data loaded correctly
         if not self.data.empty:
-            st.write("Data loaded successfully with standardized columns.")
-            st.write("Here are the first few rows after parsing dates and handling missing values:")
-            st.write(self.data.head())
-            st.write("Columns in the loaded data:", list(self.data.columns))
+            self.filtered_data = self.render_sidebar(self.data)
+            self.display_statistics(self.filtered_data)
         else:
             st.warning("Data failed to load or is empty.")
     
@@ -47,9 +45,53 @@ class RASFFDashboard:
         df[critical_columns] = df[critical_columns].fillna("N/A")
         
         return df
+    
+    def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Set up filters in the sidebar and return filtered data."""
+        st.sidebar.header("Filter Options")
+        
+        # Sidebar multiselect filters
+        selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique()))
+        selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].dropna().unique()))
+        selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique()))
+        selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique()))
 
-# Instantiate the class to run the loading, date parsing, and missing value handling
+        # Apply filters
+        filtered_df = df.copy()
+        if selected_categories:
+            filtered_df = filtered_df[filtered_df['product_category'].isin(selected_categories)]
+        if selected_hazards:
+            filtered_df = filtered_df[filtered_df['hazard_category'].isin(selected_hazards)]
+        if selected_notifying_countries:
+            filtered_df = filtered_df[filtered_df['notification_from'].isin(selected_notifying_countries)]
+        if selected_origin_countries:
+            filtered_df = filtered_df[filtered_df['country_origin'].isin(selected_origin_countries)]
+        
+        # Display a message if the filtered data is empty
+        if filtered_df.empty:
+            st.warning("No data matches the selected filters.")
+        
+        return filtered_df
+
+    def display_statistics(self, df: pd.DataFrame):
+        """Display key statistics based on the filtered data."""
+        st.header("Key Statistics")
+
+        if df.empty:
+            st.warning("No data available for statistics.")
+            return
+        
+        col1, col2, col3 = st.columns(3)
+        
+        total_notifications = len(df)
+        unique_products = df['product_category'].nunique() if 'product_category' in df.columns else 0
+        unique_hazards = df['hazard_category'].nunique() if 'hazard_category' in df.columns else 0
+        
+        col1.metric("Total Notifications", total_notifications)
+        col2.metric("Unique Product Categories", unique_products)
+        col3.metric("Unique Hazard Categories", unique_hazards)
+
+# Instantiate the class to run the filtering and display process
 if __name__ == "__main__":
-    st.title("RASFF Data Dashboard - Step 2: Parse Dates and Handle Missing Values")
+    st.title("RASFF Data Dashboard - Step 3: Set Up Filters and Display Statistics")
     dashboard = RASFFDashboard()
-
