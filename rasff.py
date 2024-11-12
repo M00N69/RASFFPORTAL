@@ -57,7 +57,36 @@ def apply_mappings(df: pd.DataFrame) -> pd.DataFrame:
     }
 
     hazard_category_mapping = {
-        # Add mappings here...
+    "GMO / novel food": ("GMO / Novel Food", "Food Composition"),
+    "TSEs": ("Transmissible Spongiform Encephalopathies (TSEs)", "Biological Hazard"),
+    "adulteration / fraud": ("Adulteration / Fraud", "Food Fraud"),
+    "allergens": ("Allergens", "Biological Hazard"),
+    "biological contaminants": ("Biological Contaminants", "Biological Hazard"),
+    "biotoxins (other)": ("Biotoxins", "Biological Hazard"),
+    "chemical contamination (other)": ("Chemical Contamination", "Chemical Hazard"),
+    "composition": ("Composition", "Food Composition"),
+    "environmental pollutants": ("Environmental Pollutants", "Chemical Hazard"),
+    "feed additives": ("Feed Additives", "Chemical Hazard"),
+    "food additives and flavourings": ("Food Additives and Flavourings", "Additives"),
+    "foreign bodies": ("Foreign Bodies", "Physical Hazard"),
+    "genetically modified": ("Genetically Modified", "Food Composition"),
+    "heavy metals": ("Heavy Metals", "Chemical Hazard"),
+    "industrial contaminants": ("Industrial Contaminants", "Chemical Hazard"),
+    "labelling absent/incomplete/incorrect": ("Labelling Issues", "Food Fraud"),
+    "migration": ("Migration", "Chemical Hazard"),
+    "mycotoxins": ("Mycotoxins", "Biological Hazard"),
+    "natural toxins (other)": ("Natural Toxins", "Biological Hazard"),
+    "non-pathogenic micro-organisms": ("Non-Pathogenic Micro-organisms", "Biological Hazard"),
+    "not determined (other)": ("Not Determined", "Other"),
+    "novel food": ("Novel Food", "Food Composition"),
+    "organoleptic aspects": ("Organoleptic Aspects", "Other"),
+    "packaging defective / incorrect": ("Packaging Issues", "Physical Hazard"),
+    "parasitic infestation": ("Parasitic Infestation", "Biological Hazard"),
+    "pathogenic micro-organisms": ("Pathogenic Micro-organisms", "Biological Hazard"),
+    "pesticide residues": ("Pesticide Residues", "Pesticide Hazard"),
+    "poor or insufficient controls": ("Insufficient Controls", "Food Fraud"),
+    "radiation": ("Radiation", "Physical Hazard"),
+    "residues of veterinary medicinal": ("Veterinary Medicinal Residues", "Chemical Hazard")
     }
 
     # Map Product Category
