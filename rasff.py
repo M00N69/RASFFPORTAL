@@ -148,7 +148,6 @@ def apply_mappings(df: pd.DataFrame) -> pd.DataFrame:
     "poor or insufficient controls": ("Insufficient Controls", "Food Fraud"),
     "radiation": ("Radiation", "Physical Hazard"),
     "residues of veterinary medicinal": ("Veterinary Medicinal Residues", "Chemical Hazard")
-}
     }
     
     # Map Product Category
