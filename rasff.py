@@ -27,16 +27,22 @@ def download_and_clean_weekly_data(year, weeks):
         url = url_template.format(str(year)[2:], year, str(week).zfill(2))
         response = requests.get(url)
         if response.status_code == 200:
-            df = pd.read_excel(BytesIO(response.content))
-            dfs.append(df)
+            try:
+                df = pd.read_excel(BytesIO(response.content))
+                # Check if required columns exist in the data
+                if 'product_category' in df.columns and 'hazard_category' in df.columns:
+                    dfs.append(df)
+                    st.info(f"Data for week {week} loaded successfully.")
+                else:
+                    st.warning(f"Data for week {week} does not have the expected structure.")
+            except Exception as e:
+                st.warning(f"Failed to read data for week {week}: {e}")
         else:
             st.warning(f"Data for week {week} could not be downloaded.")
     if dfs:
-        df = pd.concat(dfs, ignore_index=True)
-        return df
+        return pd.concat(dfs, ignore_index=True)
     else:
-        st.error("No data could be downloaded.")
-        return pd.DataFrame()
+        return pd.DataFrame()  # Return an empty DataFrame if no files could be downloaded
 
 # Apply category mappings
 def apply_mappings(df: pd.DataFrame) -> pd.DataFrame:
@@ -71,6 +77,8 @@ class RASFFDashboard:
             new_data = apply_mappings(new_data)
             self.data = pd.concat([self.data, new_data], ignore_index=True)
             st.success("Data updated with new weekly entries.")
+        else:
+            st.info("No new data was available for the specified weeks.")
 
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
@@ -151,7 +159,7 @@ class RASFFDashboard:
         # Update data button
         st.sidebar.header("Update Data")
         if st.sidebar.button("Update Data with New Weeks"):
-            self.update_data_with_weeks(2024, start_week=44)
+            self.update_data_with_weeks(2024, start_week=45)
 
         # Sidebar filters
         filtered_df = self.render_sidebar(self.data)
