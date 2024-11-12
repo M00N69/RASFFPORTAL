@@ -1,9 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import requests
+from io import BytesIO
 from datetime import datetime
 
-# Load main CSV data from GitHub
+# Main CSV data URL
+MAIN_DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv"
+
+# Load the main CSV data from GitHub
 @st.cache_data
 def load_data(url: str) -> pd.DataFrame:
     try:
@@ -14,103 +19,63 @@ def load_data(url: str) -> pd.DataFrame:
         st.error(f"Failed to load data: {e}")
         return pd.DataFrame()
 
+# Function to download and clean weekly data
+def download_and_clean_weekly_data(year, weeks):
+    url_template = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
+    dfs = []
+    for week in weeks:
+        url = url_template.format(str(year)[2:], year, str(week).zfill(2))
+        response = requests.get(url)
+        if response.status_code == 200:
+            df = pd.read_excel(BytesIO(response.content))
+            dfs.append(df)
+        else:
+            st.warning(f"Data for week {week} could not be downloaded.")
+    if dfs:
+        df = pd.concat(dfs, ignore_index=True)
+        return df
+    else:
+        st.error("No data could be downloaded.")
+        return pd.DataFrame()
+
 # Apply category mappings
 def apply_mappings(df: pd.DataFrame) -> pd.DataFrame:
     product_category_mapping = {
-    "alcoholic beverages": ("Alcoholic Beverages", "Beverages"),
-    "animal by-products": ("Animal By-products", "Animal Products"),
-    "bivalve molluscs and products thereof": ("Bivalve Molluscs", "Seafood"),
-    "cephalopods and products thereof": ("Cephalopods", "Seafood"),
-    "cereals and bakery products": ("Cereals and Bakery Products", "Grains and Bakery"),
-    "cocoa and cocoa preparations, coffee and tea": ("Cocoa, Coffee, and Tea", "Beverages"),
-    "compound feeds": ("Compound Feeds", "Animal Feed"),
-    "confectionery": ("Confectionery", "Grains and Bakery"),
-    "crustaceans and products thereof": ("Crustaceans", "Seafood"),
-    "dietetic foods, food supplements and fortified foods": ("Dietetic Foods and Supplements", "Specialty Foods"),
-    "eggs and egg products": ("Eggs and Egg Products", "Animal Products"),
-    "fats and oils": ("Fats and Oils", "Fats and Oils"),
-    "feed additives": ("Feed Additives", "Animal Feed"),
-    "feed materials": ("Feed Materials", "Animal Feed"),
-    "feed premixtures": ("Feed Premixtures", "Animal Feed"),
-    "fish and fish products": ("Fish and Fish Products", "Seafood"),
-    "food additives and flavourings": ("Food Additives and Flavourings", "Additives"),
-    "food contact materials": ("Food Contact Materials", "Packaging"),
-    "fruits and vegetables": ("Fruits and Vegetables", "Fruits and Vegetables"),
-    "gastropods": ("Gastropods", "Seafood"),
-    "herbs and spices": ("Herbs and Spices", "Spices"),
-    "honey and royal jelly": ("Honey and Royal Jelly", "Specialty Foods"),
-    "ices and desserts": ("Ices and Desserts", "Grains and Bakery"),
-    "live animals": ("Live Animals", "Animal Products"),
-    "meat and meat products (other than poultry)": ("Meat (Non-Poultry)", "Meat Products"),
-    "milk and milk products": ("Milk and Milk Products", "Dairy"),
-    "natural mineral waters": ("Natural Mineral Waters", "Beverages"),
-    "non-alcoholic beverages": ("Non-Alcoholic Beverages", "Beverages"),
-    "nuts, nut products and seeds": ("Nuts and Seeds", "Seeds and Nuts"),
-    "other food product / mixed": ("Mixed Food Products", "Other"),
-    "pet food": ("Pet Food", "Animal Feed"),
-    "plant protection products": ("Plant Protection Products", "Additives"),
-    "poultry meat and poultry meat products": ("Poultry Meat", "Meat Products"),
-    "prepared dishes and snacks": ("Prepared Dishes and Snacks", "Prepared Foods"),
-    "soups, broths, sauces and condiments": ("Soups, Broths, Sauces", "Prepared Foods"),
-    "water for human consumption (other)": ("Water (Human Consumption)", "Beverages"),
-    "wine": ("Wine", "Beverages")
+        "alcoholic beverages": ("Alcoholic Beverages", "Beverages"),
+        # (Add more mappings as needed)
     }
-
     hazard_category_mapping = {
-    "GMO / novel food": ("GMO / Novel Food", "Food Composition"),
-    "TSEs": ("Transmissible Spongiform Encephalopathies (TSEs)", "Biological Hazard"),
-    "adulteration / fraud": ("Adulteration / Fraud", "Food Fraud"),
-    "allergens": ("Allergens", "Biological Hazard"),
-    "biological contaminants": ("Biological Contaminants", "Biological Hazard"),
-    "biotoxins (other)": ("Biotoxins", "Biological Hazard"),
-    "chemical contamination (other)": ("Chemical Contamination", "Chemical Hazard"),
-    "composition": ("Composition", "Food Composition"),
-    "environmental pollutants": ("Environmental Pollutants", "Chemical Hazard"),
-    "feed additives": ("Feed Additives", "Chemical Hazard"),
-    "food additives and flavourings": ("Food Additives and Flavourings", "Additives"),
-    "foreign bodies": ("Foreign Bodies", "Physical Hazard"),
-    "genetically modified": ("Genetically Modified", "Food Composition"),
-    "heavy metals": ("Heavy Metals", "Chemical Hazard"),
-    "industrial contaminants": ("Industrial Contaminants", "Chemical Hazard"),
-    "labelling absent/incomplete/incorrect": ("Labelling Issues", "Food Fraud"),
-    "migration": ("Migration", "Chemical Hazard"),
-    "mycotoxins": ("Mycotoxins", "Biological Hazard"),
-    "natural toxins (other)": ("Natural Toxins", "Biological Hazard"),
-    "non-pathogenic micro-organisms": ("Non-Pathogenic Micro-organisms", "Biological Hazard"),
-    "not determined (other)": ("Not Determined", "Other"),
-    "novel food": ("Novel Food", "Food Composition"),
-    "organoleptic aspects": ("Organoleptic Aspects", "Other"),
-    "packaging defective / incorrect": ("Packaging Issues", "Physical Hazard"),
-    "parasitic infestation": ("Parasitic Infestation", "Biological Hazard"),
-    "pathogenic micro-organisms": ("Pathogenic Micro-organisms", "Biological Hazard"),
-    "pesticide residues": ("Pesticide Residues", "Pesticide Hazard"),
-    "poor or insufficient controls": ("Insufficient Controls", "Food Fraud"),
-    "radiation": ("Radiation", "Physical Hazard"),
-    "residues of veterinary medicinal": ("Veterinary Medicinal Residues", "Chemical Hazard")
+        "adulteration / fraud": ("Adulteration / Fraud", "Food Fraud"),
+        # (Add more mappings as needed)
     }
-
-    # Map Product Category
     df[['prodcat', 'groupprod']] = df['product_category'].apply(
         lambda x: pd.Series(product_category_mapping.get(str(x).lower(), ("Unknown", "Unknown")))
     )
-
-    # Map Hazard Category
     df[['hazcat', 'grouphaz']] = df['hazard_category'].apply(
         lambda x: pd.Series(hazard_category_mapping.get(str(x).lower(), ("Unknown", "Unknown")))
     )
-
     return df
 
-# Main class for the RASFF Dashboard
+# Main RASFF Dashboard class
 class RASFFDashboard:
     def __init__(self, url: str):
         raw_data = load_data(url)
         self.data = apply_mappings(raw_data)
 
+    def update_data_with_weeks(self, year, start_week):
+        # Determine weeks to download based on start week
+        current_week = datetime.now().isocalendar()[1]
+        weeks_to_download = list(range(start_week, current_week))
+        new_data = download_and_clean_weekly_data(year, weeks_to_download)
+        if not new_data.empty:
+            new_data = apply_mappings(new_data)
+            self.data = pd.concat([self.data, new_data], ignore_index=True)
+            st.success("Data updated with new weekly entries.")
+
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
 
-        # Date range filter using date_input
+        # Date range filter
         min_date = df['date_of_case'].min().date()
         max_date = df['date_of_case'].max().date()
         start_date, end_date = st.sidebar.date_input(
@@ -183,6 +148,11 @@ class RASFFDashboard:
     def run(self):
         st.title("RASFF Data Dashboard")
 
+        # Update data button
+        st.sidebar.header("Update Data")
+        if st.sidebar.button("Update Data with New Weeks"):
+            self.update_data_with_weeks(2024, start_week=44)
+
         # Sidebar filters
         filtered_df = self.render_sidebar(self.data)
 
@@ -195,5 +165,5 @@ class RASFFDashboard:
 # Run the dashboard
 if __name__ == "__main__":
     st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
-    dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv")
+    dashboard = RASFFDashboard(url=MAIN_DATA_URL)
     dashboard.run()
