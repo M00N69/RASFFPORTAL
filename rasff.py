@@ -17,7 +17,43 @@ def load_data(url: str) -> pd.DataFrame:
 # Apply category mappings
 def apply_mappings(df: pd.DataFrame) -> pd.DataFrame:
     product_category_mapping = {
-        # Add mappings here...
+    "alcoholic beverages": ("Alcoholic Beverages", "Beverages"),
+    "animal by-products": ("Animal By-products", "Animal Products"),
+    "bivalve molluscs and products thereof": ("Bivalve Molluscs", "Seafood"),
+    "cephalopods and products thereof": ("Cephalopods", "Seafood"),
+    "cereals and bakery products": ("Cereals and Bakery Products", "Grains and Bakery"),
+    "cocoa and cocoa preparations, coffee and tea": ("Cocoa, Coffee, and Tea", "Beverages"),
+    "compound feeds": ("Compound Feeds", "Animal Feed"),
+    "confectionery": ("Confectionery", "Grains and Bakery"),
+    "crustaceans and products thereof": ("Crustaceans", "Seafood"),
+    "dietetic foods, food supplements and fortified foods": ("Dietetic Foods and Supplements", "Specialty Foods"),
+    "eggs and egg products": ("Eggs and Egg Products", "Animal Products"),
+    "fats and oils": ("Fats and Oils", "Fats and Oils"),
+    "feed additives": ("Feed Additives", "Animal Feed"),
+    "feed materials": ("Feed Materials", "Animal Feed"),
+    "feed premixtures": ("Feed Premixtures", "Animal Feed"),
+    "fish and fish products": ("Fish and Fish Products", "Seafood"),
+    "food additives and flavourings": ("Food Additives and Flavourings", "Additives"),
+    "food contact materials": ("Food Contact Materials", "Packaging"),
+    "fruits and vegetables": ("Fruits and Vegetables", "Fruits and Vegetables"),
+    "gastropods": ("Gastropods", "Seafood"),
+    "herbs and spices": ("Herbs and Spices", "Spices"),
+    "honey and royal jelly": ("Honey and Royal Jelly", "Specialty Foods"),
+    "ices and desserts": ("Ices and Desserts", "Grains and Bakery"),
+    "live animals": ("Live Animals", "Animal Products"),
+    "meat and meat products (other than poultry)": ("Meat (Non-Poultry)", "Meat Products"),
+    "milk and milk products": ("Milk and Milk Products", "Dairy"),
+    "natural mineral waters": ("Natural Mineral Waters", "Beverages"),
+    "non-alcoholic beverages": ("Non-Alcoholic Beverages", "Beverages"),
+    "nuts, nut products and seeds": ("Nuts and Seeds", "Seeds and Nuts"),
+    "other food product / mixed": ("Mixed Food Products", "Other"),
+    "pet food": ("Pet Food", "Animal Feed"),
+    "plant protection products": ("Plant Protection Products", "Additives"),
+    "poultry meat and poultry meat products": ("Poultry Meat", "Meat Products"),
+    "prepared dishes and snacks": ("Prepared Dishes and Snacks", "Prepared Foods"),
+    "soups, broths, sauces and condiments": ("Soups, Broths, Sauces", "Prepared Foods"),
+    "water for human consumption (other)": ("Water (Human Consumption)", "Beverages"),
+    "wine": ("Wine", "Beverages")
     }
 
     hazard_category_mapping = {
