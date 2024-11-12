@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import requests
 from io import BytesIO
-import datetime
+from datetime import datetime
 
 # Load the main CSV data from GitHub
 @st.cache_data
@@ -39,7 +39,7 @@ class RASFFDashboard:
             min_value=min_date, 
             max_value=max_date, 
             value=(min_date, max_date),
-            format="YYYY-MM-DD"
+            format="%Y-%m-%d"  # Use the correct date format
         )
         filtered_df = df[(df['date_of_case'] >= pd.to_datetime(date_range[0])) & (df['date_of_case'] <= pd.to_datetime(date_range[1]))]
 
@@ -104,7 +104,7 @@ class RASFFDashboard:
         fig_pie = px.pie(hazard_counts, values=hazard_counts.values, names=hazard_counts.index, title="Top 10 Hazard Categories")
         st.plotly_chart(fig_pie)
 
-    async def run(self):
+    def run(self):
         st.title("RASFF Data Dashboard")
 
         # Sidebar filters
@@ -120,5 +120,4 @@ class RASFFDashboard:
 if __name__ == "__main__":
     st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")  # Ensure this is the first Streamlit command
     dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv")
-    import asyncio
-    asyncio.run(dashboard.run())
+    dashboard.run()
