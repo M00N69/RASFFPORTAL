@@ -199,7 +199,7 @@ class RASFFDashboard:
         # Update data button
         st.sidebar.header("Update Data")
         if st.sidebar.button("Update Data with New Weeks"):
-            self.update_data_with_weeks(2024, start_week=45)
+            self.update_data_with_weeks(2024, start_week=44)
 
         # Sidebar filters
         filtered_df = self.render_sidebar(self.data)
