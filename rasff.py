@@ -26,12 +26,12 @@ def apply_mappings(df: pd.DataFrame) -> pd.DataFrame:
 
     # Map Product Category
     df[['prodcat', 'groupprod']] = df['product_category'].apply(
-        lambda x: pd.Series(product_category_mapping.get(x.lower(), ("Unknown", "Unknown")))
+        lambda x: pd.Series(product_category_mapping.get(str(x).lower(), ("Unknown", "Unknown")))
     )
 
     # Map Hazard Category
     df[['hazcat', 'grouphaz']] = df['hazard_category'].apply(
-        lambda x: pd.Series(hazard_category_mapping.get(x.lower(), ("Unknown", "Unknown")))
+        lambda x: pd.Series(hazard_category_mapping.get(str(x).lower(), ("Unknown", "Unknown")))
     )
 
     return df
@@ -132,4 +132,3 @@ if __name__ == "__main__":
     st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
     dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv")
     dashboard.run()
-
