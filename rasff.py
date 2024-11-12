@@ -1,11 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import requests
-from io import BytesIO
 from datetime import datetime
 
-# Load the main CSV data from GitHub
+# Load main CSV data from GitHub
 @st.cache_data
 def load_data(url: str) -> pd.DataFrame:
     try:
@@ -16,44 +14,57 @@ def load_data(url: str) -> pd.DataFrame:
         st.error(f"Failed to load data: {e}")
         return pd.DataFrame()
 
-# Simple function to clean the data and fill missing values if needed
-def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.dropna(subset=['date_of_case'])
-    df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
-    df = df.dropna(subset=['date_of_case'])  # Drop any rows with null dates after conversion
+# Apply category mappings
+def apply_mappings(df: pd.DataFrame) -> pd.DataFrame:
+    product_category_mapping = {
+        # Add mappings here...
+    }
+
+    hazard_category_mapping = {
+        # Add mappings here...
+    }
+
+    # Map Product Category
+    df[['prodcat', 'groupprod']] = df['product_category'].apply(
+        lambda x: pd.Series(product_category_mapping.get(x.lower(), ("Unknown", "Unknown")))
+    )
+
+    # Map Hazard Category
+    df[['hazcat', 'grouphaz']] = df['hazard_category'].apply(
+        lambda x: pd.Series(hazard_category_mapping.get(x.lower(), ("Unknown", "Unknown")))
+    )
+
     return df
 
 # Main class for the RASFF Dashboard
 class RASFFDashboard:
     def __init__(self, url: str):
-        self.data = clean_data(load_data(url))
+        raw_data = load_data(url)
+        self.data = apply_mappings(raw_data)
 
     def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
         st.sidebar.header("Filter Options")
 
-        # Date range filter
-        min_date = df['date_of_case'].min().date()  # Convert to datetime.date
-        max_date = df['date_of_case'].max().date()  # Convert to datetime.date
-        date_range = st.sidebar.slider(
+        # Date range filter using date_input
+        min_date = df['date_of_case'].min().date()
+        max_date = df['date_of_case'].max().date()
+        start_date, end_date = st.sidebar.date_input(
             "Date Range", 
-            min_value=min_date, 
-            max_value=max_date, 
-            value=(min_date, max_date),
-            format="%Y-%m-%d"  # Use the correct date format
+            [min_date, max_date]
         )
-        filtered_df = df[(df['date_of_case'] >= pd.to_datetime(date_range[0])) & (df['date_of_case'] <= pd.to_datetime(date_range[1]))]
+        filtered_df = df[(df['date_of_case'] >= pd.to_datetime(start_date)) & (df['date_of_case'] <= pd.to_datetime(end_date))]
 
-        # Multiselect filters
-        selected_categories = st.sidebar.multiselect("Product Categories", sorted(df['product_category'].dropna().unique()))
-        selected_hazards = st.sidebar.multiselect("Hazard Categories", sorted(df['hazard_category'].dropna().unique()))
+        # Multiselect filters for grouped categories
+        selected_prod_groups = st.sidebar.multiselect("Product Groups", sorted(df['groupprod'].dropna().unique()))
+        selected_hazard_groups = st.sidebar.multiselect("Hazard Groups", sorted(df['grouphaz'].dropna().unique()))
         selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique()))
         selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique()))
 
         # Apply filters
-        if selected_categories:
-            filtered_df = filtered_df[filtered_df['product_category'].isin(selected_categories)]
-        if selected_hazards:
-            filtered_df = filtered_df[filtered_df['hazard_category'].isin(selected_hazards)]
+        if selected_prod_groups:
+            filtered_df = filtered_df[filtered_df['groupprod'].isin(selected_prod_groups)]
+        if selected_hazard_groups:
+            filtered_df = filtered_df[filtered_df['grouphaz'].isin(selected_hazard_groups)]
         if selected_notifying_countries:
             filtered_df = filtered_df[filtered_df['notification_from'].isin(selected_notifying_countries)]
         if selected_origin_countries:
@@ -65,8 +76,8 @@ class RASFFDashboard:
         st.header("Key Statistics")
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Notifications", len(df))
-        col2.metric("Unique Product Categories", df['product_category'].nunique())
-        col3.metric("Unique Hazard Categories", df['hazard_category'].nunique())
+        col2.metric("Unique Product Categories", df['prodcat'].nunique())
+        col3.metric("Unique Hazard Categories", df['hazcat'].nunique())
 
     def display_visualizations(self, df: pd.DataFrame):
         st.header("Visualizations")
@@ -95,12 +106,12 @@ class RASFFDashboard:
         st.plotly_chart(fig_origin_map)
 
         # Bar Chart for Product Categories
-        product_counts = df['product_category'].value_counts().head(10)
+        product_counts = df['prodcat'].value_counts().head(10)
         fig_bar = px.bar(product_counts, x=product_counts.index, y=product_counts.values, title="Top Product Categories")
         st.plotly_chart(fig_bar)
 
         # Pie Chart for Top Hazard Categories
-        hazard_counts = df['hazard_category'].value_counts().head(10)
+        hazard_counts = df['hazcat'].value_counts().head(10)
         fig_pie = px.pie(hazard_counts, values=hazard_counts.values, names=hazard_counts.index, title="Top 10 Hazard Categories")
         st.plotly_chart(fig_pie)
 
@@ -118,6 +129,7 @@ class RASFFDashboard:
 
 # Run the dashboard
 if __name__ == "__main__":
-    st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")  # Ensure this is the first Streamlit command
-    dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/rasff_%202020TO30OCT2024.csv")
+    st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
+    dashboard = RASFFDashboard(url="https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv")
     dashboard.run()
+
