@@ -1,227 +1,89 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import requests
+import numpy as np
+from scipy.stats import chi2_contingency
 from io import BytesIO
-from datetime import datetime
 
-# Main CSV data URL
-MAIN_DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv"
-
-# Load the main CSV data from GitHub
 @st.cache_data
 def load_data(url: str) -> pd.DataFrame:
-    try:
-        df = pd.read_csv(url, parse_dates=['Date of Case'])
-        df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]  # Standardize column names
-        return df
-    except Exception as e:
-        st.error(f"Failed to load data: {e}")
-        return pd.DataFrame()
-
-# Standard column names expected in the main data
-expected_columns = [
-    "date_of_case", "reference", "notification_from", "country_origin", 
-    "product", "product_category", "hazard_substance", "hazard_category",
-    "prodcat", "groupprod", "hazcat", "grouphaz"
-]
-
-# Column mapping for transforming weekly file structure to match main data
-weekly_column_mapping = {
-    "Date of Case": "date_of_case",
-    "Reference": "reference",
-    "Notification From": "notification_from",
-    "Country Origin": "country_origin",
-    "Product": "product",
-    "Product Category": "product_category",
-    "Hazard Substance": "hazard_substance",
-    "Hazard Category": "hazard_category"
-}
-
-# Function to download and clean weekly data
-def download_and_clean_weekly_data(year, weeks):
-    url_template = "https://www.sirene-diffusion.fr/regia/000-rasff/{}/rasff-{}-{}.xls"
-    dfs = []
-    for week in weeks:
-        url = url_template.format(str(year)[2:], year, str(week).zfill(2))
-        response = requests.get(url)
-        if response.status_code == 200:
-            try:
-                # Attempt to read and transform the weekly data
-                df = pd.read_excel(BytesIO(response.content))
-                
-                # Rename columns according to the mapping
-                df = df.rename(columns=weekly_column_mapping)
-                
-                # Ensure all expected columns are present, filling missing columns with None
-                for col in expected_columns:
-                    if col not in df.columns:
-                        df[col] = None  # Add missing column with default None values
-                        
-                # Select and reorder columns to match the main DataFrame
-                df = df[expected_columns]
-                
-                # Apply category mappings
-                df = apply_mappings(df)
-                
-                dfs.append(df)
-                st.info(f"Data for week {week} loaded successfully.")
-            except Exception as e:
-                st.warning(f"Failed to process data for week {week}: {e}")
-        else:
-            st.warning(f"Data for week {week} could not be downloaded.")
-    
-    if dfs:
-        return pd.concat(dfs, ignore_index=True)
-    else:
-        return pd.DataFrame()  # Return an empty DataFrame if no files could be downloaded
-
-# Apply category mappings
-def apply_mappings(df: pd.DataFrame) -> pd.DataFrame:
-    # ... (existing mapping code)
+    df = pd.read_csv(url, parse_dates=['Date of Case'])
+    df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]
     return df
 
-# Main RASFF Dashboard class
-class RASFFDashboard:
-    def __init__(self, url: str):
-        raw_data = load_data(url)
-        self.data = apply_mappings(raw_data)
+# Télécharger le fichier exporté
+def export_data(df: pd.DataFrame):
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="Télécharger les données filtrées (CSV)",
+        data=csv,
+        file_name='filtered_data.csv',
+        mime='text/csv',
+    )
 
-    def update_data_with_weeks(self, year, start_week):
-        # Determine weeks to download based on start week
-        current_week = datetime.now().isocalendar()[1]
-        weeks_to_download = list(range(start_week, current_week))
-        new_data = download_and_clean_weekly_data(year, weeks_to_download)
-        if not new_data.empty:
-            self.data = pd.concat([self.data, new_data], ignore_index=True)
-            st.success("Data updated with new weekly entries.")
-        else:
-            st.info("No new data was available for the specified weeks.")
+def correlation_analysis(df: pd.DataFrame, var1: str, var2: str):
+    contingency_table = pd.crosstab(df[var1], df[var2])
+    chi2, p, _, _ = chi2_contingency(contingency_table)
+    return chi2, p
 
-    def render_sidebar(self, df: pd.DataFrame) -> pd.DataFrame:
-        st.sidebar.header("Filter Options")
+def render_main_page(df: pd.DataFrame):
+    st.title("Tableau de Bord RASFF")
 
-        # Date range filter
-        min_date = df['date_of_case'].min().date()
-        max_date = df['date_of_case'].max().date()
-        start_date, end_date = st.sidebar.date_input(
-            "Date Range", 
-            [min_date, max_date]
-        )
-        filtered_df = df[(df['date_of_case'] >= pd.to_datetime(start_date)) & (df['date_of_case'] <= pd.to_datetime(end_date))]
+    # Filtres interactifs
+    date_range = st.sidebar.date_input("Filtrer par date", [df['date_of_case'].min(), df['date_of_case'].max()])
+    df_filtered = df[(df['date_of_case'] >= pd.to_datetime(date_range[0])) & (df['date_of_case'] <= pd.to_datetime(date_range[1]))]
 
-        # Multiselect filters for grouped categories
-        selected_prod_groups = st.sidebar.multiselect("Product Groups", sorted(df['groupprod'].dropna().unique()))
-        selected_hazard_groups = st.sidebar.multiselect("Hazard Groups", sorted(df['grouphaz'].dropna().unique()))
-        selected_notifying_countries = st.sidebar.multiselect("Notifying Countries", sorted(df['notification_from'].dropna().unique()))
-        selected_origin_countries = st.sidebar.multiselect("Country of Origin", sorted(df['country_origin'].dropna().unique()))
+    # Résumé des données
+    st.header("Résumé des Données")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Notifications", len(df_filtered))
+    col2.metric("Catégories de Produits", df_filtered['product_category'].nunique())
+    col3.metric("Catégories de Dangers", df_filtered['hazard_category'].nunique())
 
-        # Apply filters
-        if selected_prod_groups:
-            filtered_df = filtered_df[filtered_df['groupprod'].isin(selected_prod_groups)]
-        if selected_hazard_groups:
-            filtered_df = filtered_df[filtered_df['grouphaz'].isin(selected_hazard_groups)]
-        if selected_notifying_countries:
-            filtered_df = filtered_df[filtered_df['notification_from'].isin(selected_notifying_countries)]
-        if selected_origin_countries:
-            filtered_df = filtered_df[filtered_df['country_origin'].isin(selected_origin_countries)]
+    # Options de colonnes
+    columns_to_display = st.multiselect("Colonnes à afficher", options=df.columns, default=df.columns)
 
-        return filtered_df
+    # Tableau de données avec pagination
+    st.dataframe(df_filtered[columns_to_display], use_container_width=True)
+    export_data(df_filtered)
 
-    def display_statistics(self, df: pd.DataFrame):
-        st.header("Key Statistics")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Notifications", len(df))
-        col2.metric("Unique Product Categories", df['prodcat'].nunique())
-        col3.metric("Unique Hazard Categories", df['hazcat'].nunique())
+def render_correlation_page(df: pd.DataFrame):
+    st.title("Analyse des Corrélations")
+    var1 = st.selectbox("Choisir la première variable catégorielle", df.select_dtypes('object').columns)
+    var2 = st.selectbox("Choisir la deuxième variable catégorielle", df.select_dtypes('object').columns)
 
-    def display_visualizations(self, df: pd.DataFrame):
-        st.header("Visualizations")
+    chi2, p_value = correlation_analysis(df, var1, var2)
+    st.write(f"Test du Chi-carré entre **{var1}** et **{var2}**:")
+    st.write(f"Chi² = {chi2:.2f}, p-valeur = {p_value:.4f}")
 
-        # European Map for Notifying Countries
-        fig_notifying_map = px.choropleth(
-            df.groupby('notification_from').size().reset_index(name='count'),
-            locations='notification_from',
-            locationmode='country names',
-            color='count',
-            scope="europe",
-            title="European Map of Notifying Countries",
-            color_continuous_scale='Blues'
-        )
-        st.plotly_chart(fig_notifying_map)
+    if p_value < 0.05:
+        st.success("Corrélation significative détectée!")
+    else:
+        st.warning("Pas de corrélation significative.")
 
-        # World Map for Origin Countries
-        fig_origin_map = px.choropleth(
-            df.groupby('country_origin').size().reset_index(name='count'),
-            locations='country_origin',
-            locationmode='country names',
-            color='count',
-            title="World Map of Origin Countries",
-            color_continuous_scale='Reds'
-        )
-        st.plotly_chart(fig_origin_map)
+    # Carte thermique des corrélations
+    st.header("Carte Thermique des Corrélations")
+    heatmap_data = df.groupby([var1, var2]).size().unstack(fill_value=0)
+    fig = px.imshow(heatmap_data, text_auto=True, title="Carte Thermique des Fréquences")
+    st.plotly_chart(fig, use_container_width=True)
 
-        # Bar Chart for Product Categories
-        product_counts = df['prodcat'].value_counts().head(10)
-        fig_bar = px.bar(product_counts, x=product_counts.index, y=product_counts.values, title="Top Product Categories")
-        st.plotly_chart(fig_bar)
+    # Graphique à barres
+    st.header("Graphique à Barres des Fréquences")
+    bar_data = df[var1].value_counts()
+    fig_bar = px.bar(bar_data, x=bar_data.index, y=bar_data.values, labels={'y': 'Fréquence', 'x': var1}, title=f"Distribution des {var1}")
+    st.plotly_chart(fig_bar, use_container_width=True)
 
-        # Pie Chart for Top Hazard Categories
-        hazard_counts = df['hazcat'].value_counts().head(10)
-        fig_pie = px.pie(hazard_counts, values=hazard_counts.values, names=hazard_counts.index, title="Top 10 Hazard Categories")
-        st.plotly_chart(fig_pie)
+def main():
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio("Aller à", ["Tableau Principal", "Analyse des Corrélations"])
 
-    def run(self):
-        st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
-        st.title("RASFF Data Dashboard")
+    df = load_data("https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv")
 
-        # Update data button
-        st.sidebar.header("Update Data")
-        if st.sidebar.button("Update Data with New Weeks"):
-            self.update_data_with_weeks(2024, start_week=44)
+    if page == "Tableau Principal":
+        render_main_page(df)
+    elif page == "Analyse des Corrélations":
+        render_correlation_page(df)
 
-        # Sidebar filters
-        filtered_df = self.render_sidebar(self.data)
-
-        # Display statistics
-        self.display_statistics(filtered_df)
-
-        # Display the filtered data in a formatted table
-        st.header("Notification Details")
-        st.dataframe(filtered_df, use_container_width=True)
-
-        # Add an option to show/hide columns
-        all_columns = filtered_df.columns
-        selected_columns = st.multiselect("Select Columns to Display", all_columns, default=all_columns)
-        st.dataframe(filtered_df[selected_columns], use_container_width=True)
-
-        # Add pagination
-        page_size = 25
-        total_pages = (len(filtered_df) // page_size) + 1
-        current_page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
-        start_idx = (current_page - 1) * page_size
-        end_idx = start_idx + page_size
-        st.dataframe(filtered_df.iloc[start_idx:end_idx], use_container_width=True)
-
-        # Add export options
-        st.button("Export as CSV", on_click=lambda: st.download_button(
-            "RASFF_Data.csv",
-            filtered_df.to_csv(index=False),
-            "text/csv",
-            "Download"
-        ))
-
-        st.button("Export as Excel", on_click=lambda: st.download_button(
-            "RASFF_Data.xlsx",
-            filtered_df.to_excel("RASFF_Data.xlsx", index=False),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "Download"
-        ))
-
-        # Display visualizations
-        self.display_visualizations(filtered_df)
-
-# Run the dashboard
 if __name__ == "__main__":
-    dashboard = RASFFDashboard(url=MAIN_DATA_URL)
-    dashboard.run()
+    st.set_page_config(page_title="RASFF Dashboard", layout="wide")
+    main()
