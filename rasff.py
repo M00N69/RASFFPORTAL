@@ -6,7 +6,6 @@ from io import BytesIO
 from datetime import datetime
 from scipy.stats import chi2_contingency
 import numpy as np
-from io import BytesIO
 
 # URL principal pour les données consolidées
 MAIN_DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv"
@@ -17,7 +16,7 @@ def load_data(url: str) -> pd.DataFrame:
     Charge les données principales depuis l'URL donnée et nettoie les colonnes.
     """
     try:
-        df = pd.read_csv(url, parse_dates=['Date of Case'])
+        df = pd.read_csv(url, parse_dates=['date_of_case'])
         df.columns = [col.strip().replace(" ", "_").lower() for col in df.columns]
         return df
     except Exception as e:
@@ -53,6 +52,7 @@ def clean_and_format_data(df: pd.DataFrame) -> pd.DataFrame:
     df['date_of_case'] = pd.to_datetime(df['date_of_case'], errors='coerce')
     df = apply_mappings(df)
     return df
+
 def download_weekly_data(year, weeks):
     """
     Télécharge et nettoie les données hebdomadaires pour les semaines spécifiées.
@@ -72,7 +72,6 @@ def download_weekly_data(year, weeks):
         except Exception as e:
             st.warning(f"Erreur lors du traitement de la semaine {week} : {e}")
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
-
 
 def render_filtered_table(df: pd.DataFrame):
     """
@@ -100,6 +99,7 @@ def render_filtered_table(df: pd.DataFrame):
         df.to_excel(writer, index=False, sheet_name='Filtered Data')
         writer.save()
     st.download_button("Télécharger les données (Excel)", excel_buffer.getvalue(), "filtered_data.xlsx", "application/vnd.ms-excel")
+
 def display_visualizations(df: pd.DataFrame):
     """
     Affiche les visualisations interactives.
@@ -131,6 +131,7 @@ def display_statistics(df: pd.DataFrame):
     col1.metric("Total Notifications", len(df))
     col2.metric("Catégories de Produits Uniques", df['prodcat'].nunique())
     col3.metric("Catégories de Dangers Uniques", df['hazcat'].nunique())
+
 def correlation_analysis(df: pd.DataFrame):
     """
     Analyse les corrélations entre catégories de produits et de dangers.
@@ -152,6 +153,7 @@ def correlation_analysis(df: pd.DataFrame):
     # Carte thermique
     fig_heatmap = px.imshow(contingency_table, title="Corrélations Produits vs Dangers", labels=dict(x="Danger", y="Produit"))
     st.plotly_chart(fig_heatmap)
+
 class RASFFDashboard:
     def __init__(self, url: str):
         raw_data = load_data(url)
@@ -171,15 +173,14 @@ class RASFFDashboard:
         st.title("Tableau de Bord RASFF")
         tabs = st.tabs(["Tableau Filtré", "Visualisations", "Corrélations"])
         with tabs[0]:
-            filtered_df = render_filtered_table(self.data)
+            render_filtered_table(self.data)
         with tabs[1]:
-            display_statistics(filtered_df)
-            display_visualizations(filtered_df)
+            display_statistics(self.data)
+            display_visualizations(self.data)
         with tabs[2]:
-            correlation_analysis(filtered_df)
+            correlation_analysis(self.data)
 
 if __name__ == "__main__":
     st.set_page_config(page_title="RASFF Dashboard", layout="wide")
     dashboard = RASFFDashboard(url=MAIN_DATA_URL)
     dashboard.run()
-
