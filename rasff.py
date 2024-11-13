@@ -11,7 +11,6 @@ st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
 # Main CSV data URL
 MAIN_DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv"
 
-# Load the main CSV data from GitHub
 @st.cache_data
 def load_data(url: str) -> pd.DataFrame:
     try:
