@@ -273,8 +273,7 @@ class RASFFDashboard:
         # Display visualizations
         self.display_visualizations(filtered_df)
 
-# Run the dashboard
+# Lancement du tableau de bord
 if __name__ == "__main__":
-    st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
     dashboard = RASFFDashboard(url=MAIN_DATA_URL)
     dashboard.run()
