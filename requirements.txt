@@ -8,3 +8,5 @@ pandasai
 pyyaml
 google-generativeai
 ipyvizzu
+numpy
+scipy
