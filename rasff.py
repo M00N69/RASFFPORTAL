@@ -5,6 +5,9 @@ import requests
 from io import BytesIO
 from datetime import datetime
 
+# Configure la page Streamlit (doit être exécuté en premier)
+st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
+
 # Main CSV data URL
 MAIN_DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv"
 
