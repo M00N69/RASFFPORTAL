@@ -6,6 +6,7 @@ from io import BytesIO
 from datetime import datetime
 from scipy.stats import chi2_contingency
 import numpy as np
+from io import BytesIO
 
 # URL principal pour les données consolidées
 MAIN_DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv"
@@ -71,6 +72,8 @@ def download_weekly_data(year, weeks):
         except Exception as e:
             st.warning(f"Erreur lors du traitement de la semaine {week} : {e}")
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+
 def render_filtered_table(df: pd.DataFrame):
     """
     Affiche un tableau filtré avec exportation et résumé.
@@ -87,9 +90,16 @@ def render_filtered_table(df: pd.DataFrame):
     # Affichage du tableau
     st.dataframe(df[display_columns], use_container_width=True)
 
-    # Options d'exportation
-    st.download_button("Télécharger les données (CSV)", df.to_csv(index=False), "filtered_data.csv", "text/csv")
-    st.download_button("Télécharger les données (Excel)", df.to_excel(index=False), "filtered_data.xlsx", "application/vnd.ms-excel")
+    # Export CSV
+    csv_data = df.to_csv(index=False).encode('utf-8')
+    st.download_button("Télécharger les données (CSV)", csv_data, "filtered_data.csv", "text/csv")
+
+    # Export Excel
+    excel_buffer = BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Filtered Data')
+        writer.save()
+    st.download_button("Télécharger les données (Excel)", excel_buffer.getvalue(), "filtered_data.xlsx", "application/vnd.ms-excel")
 def display_visualizations(df: pd.DataFrame):
     """
     Affiche les visualisations interactives.
