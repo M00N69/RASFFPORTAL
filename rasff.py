@@ -5,6 +5,9 @@ import numpy as np
 from scipy.stats import chi2_contingency
 from io import BytesIO
 
+# Assurez-vous que `set_page_config` est appelé ici, immédiatement après les imports.
+st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
+
 @st.cache_data
 def load_data(url: str) -> pd.DataFrame:
     df = pd.read_csv(url, parse_dates=['Date of Case'])
@@ -85,5 +88,4 @@ def main():
         render_correlation_page(df)
 
 if __name__ == "__main__":
-    st.set_page_config(page_title="RASFF Dashboard", layout="wide")
     main()
