@@ -1,12 +1,6 @@
 streamlit
 pandas
 plotly
-python-Levenshtein
 requests
+xlrd
 openpyxl
-pandasai
-pyyaml
-google-generativeai
-ipyvizzu
-numpy
-scipy
