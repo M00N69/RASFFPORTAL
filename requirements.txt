@@ -4,3 +4,6 @@ plotly
 requests
 xlrd
 openpyxl
+seaborn 
+scipy 
+streamlit-option-menu
