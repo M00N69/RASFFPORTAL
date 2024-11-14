@@ -1,9 +1,13 @@
 import streamlit as st
+from streamlit_option_menu import option_menu  # Nécessite l'installation de streamlit-option-menu (pip install streamlit-option-menu)
 import pandas as pd
 import plotly.express as px
 import requests
 from io import BytesIO
 from datetime import datetime
+from scipy.stats import chi2_contingency, chi2
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 # Main CSV data URL
 MAIN_DATA_URL = "https://raw.githubusercontent.com/M00N69/RASFFPORTAL/main/unified_rasff_data_with_grouping.csv"
@@ -269,8 +273,85 @@ class RASFFDashboard:
         # Display visualizations
         self.display_visualizations(filtered_df)
 
+def show_statistical_analysis(df: pd.DataFrame):
+    st.title("Statistical Analysis: Correlation and Chi2 Test")
+
+    st.write("This section provides a statistical analysis of the RASFF data, identifying significant correlations between products, hazards, and countries.")
+
+    # Contingency Table for Product Categories and Hazard Categories
+    st.subheader("Chi2 Test: Product Categories vs Hazard Categories")
+    contingency_table = pd.crosstab(df['prodcat'], df['hazcat'])
+    st.write("Contingency Table", contingency_table)
+
+    # Perform Chi2 Test
+    chi2_stat, p_value, dof, expected = chi2_contingency(contingency_table)
+    st.write(f"Chi2 Statistic: {chi2_stat:.2f}")
+    st.write(f"P-value: {p_value:.4f}")
+    st.write(f"Degrees of Freedom: {dof}")
+    st.write("Expected Frequencies", pd.DataFrame(expected, index=contingency_table.index, columns=contingency_table.columns))
+
+    if p_value < 0.05:
+        st.success("The result is statistically significant. There is an association between product categories and hazard categories.")
+    else:
+        st.warning("The result is not statistically significant. No strong association was found.")
+
+    # Visualizations for Correlation
+    st.subheader("Correlation Heatmap: Product Categories vs Hazard Categories")
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(contingency_table, annot=True, fmt="d", cmap="coolwarm", ax=ax)
+    st.pyplot(fig)
+
+    # Chi2 Test for Notifying Countries vs Hazard Groups
+    st.subheader("Chi2 Test: Notifying Countries vs Hazard Groups")
+    country_hazard_table = pd.crosstab(df['notification_from'], df['grouphaz'])
+    st.write("Contingency Table", country_hazard_table)
+
+    # Perform Chi2 Test
+    chi2_stat, p_value, dof, expected = chi2_contingency(country_hazard_table)
+    st.write(f"Chi2 Statistic: {chi2_stat:.2f}")
+    st.write(f"P-value: {p_value:.4f}")
+    st.write(f"Degrees of Freedom: {dof}")
+    st.write("Expected Frequencies", pd.DataFrame(expected, index=country_hazard_table.index, columns=country_hazard_table.columns))
+
+    if p_value < 0.05:
+        st.success("The result is statistically significant. There is an association between notifying countries and hazard groups.")
+    else:
+        st.warning("The result is not statistically significant. No strong association was found.")
+
+    # Visualizing Top Associations
+    st.subheader("Top Associations between Product Categories and Hazards")
+    top_associations = contingency_table.stack().reset_index(name='count').sort_values(by='count', ascending=False).head(10)
+    fig_bar = px.bar(
+        top_associations, 
+        x='prodcat', 
+        y='count', 
+        color='hazcat', 
+        title="Top Associations between Product Categories and Hazards"
+    )
+    st.plotly_chart(fig_bar)
+
 # Run the dashboard
-if __name__ == "__main__":
+
+def main():
     st.set_page_config(page_title="RASFF Data Dashboard", layout="wide")
+
+    # Barre de navigation
+    selected_page = option_menu(
+        "RASFF Dashboard",
+        ["Dashboard", "Statistical Analysis"],
+        icons=["house", "bar-chart"],
+        menu_icon="menu",
+        default_index=0,
+        orientation="horizontal"
+    )
+
+    # Initialisation des pages
     dashboard = RASFFDashboard(url=MAIN_DATA_URL)
-    dashboard.run()
+    if selected_page == "Dashboard":
+        dashboard.run()
+    elif selected_page == "Statistical Analysis":
+        show_statistical_analysis(dashboard.data)
+
+if __name__ == "__main__":
+    main()
+
