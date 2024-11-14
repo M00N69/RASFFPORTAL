@@ -275,60 +275,136 @@ class RASFFDashboard:
 
 def show_statistical_analysis(df: pd.DataFrame):
     st.title("Statistical Analysis: Correlation and Chi2 Test")
+    st.write("This section provides an advanced statistical analysis of the RASFF data, identifying significant correlations between products, hazards, and notifying countries.")
 
-    st.write("This section provides a statistical analysis of the RASFF data, identifying significant correlations between products, hazards, and countries.")
+    # Filtrage interactif
+    st.sidebar.header("Filter Options for Statistical Analysis")
+    selected_prod_categories = st.sidebar.multiselect("Select Product Categories", sorted(df['prodcat'].dropna().unique()))
+    selected_hazard_categories = st.sidebar.multiselect("Select Hazard Categories", sorted(df['hazcat'].dropna().unique()))
+    selected_notifying_countries = st.sidebar.multiselect("Select Notifying Countries", sorted(df['notification_from'].dropna().unique()))
+    
+    # Application des filtres
+    filtered_df = df.copy()
+    if selected_prod_categories:
+        filtered_df = filtered_df[filtered_df['prodcat'].isin(selected_prod_categories)]
+    if selected_hazard_categories:
+        filtered_df = filtered_df[filtered_df['hazcat'].isin(selected_hazard_categories)]
+    if selected_notifying_countries:
+        filtered_df = filtered_df[filtered_df['notification_from'].isin(selected_notifying_countries)]
 
-    # Contingency Table for Product Categories and Hazard Categories
+    # Vérifiez si les données filtrées sont suffisantes pour l'analyse
+    if filtered_df.empty:
+        st.warning("No data available for the selected filters. Please adjust the filters.")
+        return
+
+    ### Test Chi2 : Catégories de Produits vs Catégories de Dangers ###
     st.subheader("Chi2 Test: Product Categories vs Hazard Categories")
-    contingency_table = pd.crosstab(df['prodcat'], df['hazcat'])
-    st.write("Contingency Table", contingency_table)
+    contingency_table = pd.crosstab(filtered_df['prodcat'], filtered_df['hazcat'])
+    st.write("Contingency Table (Filtered Data)", contingency_table)
 
-    # Perform Chi2 Test
+    # Test du Chi2
     chi2_stat, p_value, dof, expected = chi2_contingency(contingency_table)
-    st.write(f"Chi2 Statistic: {chi2_stat:.2f}")
-    st.write(f"P-value: {p_value:.4f}")
-    st.write(f"Degrees of Freedom: {dof}")
-    st.write("Expected Frequencies", pd.DataFrame(expected, index=contingency_table.index, columns=contingency_table.columns))
+    st.write(f"**Chi2 Statistic**: {chi2_stat:.2f}")
+    st.write(f"**P-value**: {p_value:.4f}")
+    st.write(f"**Degrees of Freedom (dof)**: {dof}")
+    st.write("**Expected Frequencies Table**:", pd.DataFrame(expected, index=contingency_table.index, columns=contingency_table.columns))
 
+    # Analyse du résultat
     if p_value < 0.05:
-        st.success("The result is statistically significant. There is an association between product categories and hazard categories.")
+        st.success(
+            "The result is **statistically significant** (P-value < 0.05). This indicates a strong association between product categories and hazard categories."
+        )
+        st.write("""
+        **Interpretation**:
+        - Some product categories are more likely to be associated with certain hazard categories.
+        - Explore the heatmap and bar charts below for insights on specific associations.
+        """)
     else:
-        st.warning("The result is not statistically significant. No strong association was found.")
+        st.warning(
+            "The result is **not statistically significant** (P-value >= 0.05). This indicates no strong association between product categories and hazard categories."
+        )
 
-    # Visualizations for Correlation
-    st.subheader("Correlation Heatmap: Product Categories vs Hazard Categories")
+    ### Visualisation Heatmap ###
+    st.subheader("Heatmap: Product Categories vs Hazard Categories")
     fig, ax = plt.subplots(figsize=(10, 8))
     sns.heatmap(contingency_table, annot=True, fmt="d", cmap="coolwarm", ax=ax)
     st.pyplot(fig)
 
-    # Chi2 Test for Notifying Countries vs Hazard Groups
-    st.subheader("Chi2 Test: Notifying Countries vs Hazard Groups")
-    country_hazard_table = pd.crosstab(df['notification_from'], df['grouphaz'])
-    st.write("Contingency Table", country_hazard_table)
+    ### Affichage des associations les plus fortes ###
+    st.subheader("Top Significant Associations")
+    top_associations = (
+        contingency_table.stack()
+        .reset_index(name='count')
+        .sort_values(by='count', ascending=False)
+        .head(10)
+    )
+    st.write("Top 10 Associations (Filtered Data)", top_associations)
 
-    # Perform Chi2 Test
-    chi2_stat, p_value, dof, expected = chi2_contingency(country_hazard_table)
-    st.write(f"Chi2 Statistic: {chi2_stat:.2f}")
-    st.write(f"P-value: {p_value:.4f}")
-    st.write(f"Degrees of Freedom: {dof}")
-    st.write("Expected Frequencies", pd.DataFrame(expected, index=country_hazard_table.index, columns=country_hazard_table.columns))
-
-    if p_value < 0.05:
-        st.success("The result is statistically significant. There is an association between notifying countries and hazard groups.")
-    else:
-        st.warning("The result is not statistically significant. No strong association was found.")
-
-    # Visualizing Top Associations
-    st.subheader("Top Associations between Product Categories and Hazards")
-    top_associations = contingency_table.stack().reset_index(name='count').sort_values(by='count', ascending=False).head(10)
+    # Graphique des top associations
     fig_bar = px.bar(
         top_associations, 
         x='prodcat', 
         y='count', 
         color='hazcat', 
-        title="Top Associations between Product Categories and Hazards"
+        title="Top Associations between Product Categories and Hazards",
+        labels={"prodcat": "Product Category", "count": "Count", "hazcat": "Hazard Category"}
     )
     st.plotly_chart(fig_bar)
+
+    ### Test Chi2 : Pays Notifiants vs Groupes de Dangers ###
+    st.subheader("Chi2 Test: Notifying Countries vs Hazard Groups")
+    country_hazard_table = pd.crosstab(filtered_df['notification_from'], filtered_df['grouphaz'])
+    st.write("Contingency Table (Filtered Data)", country_hazard_table)
+
+    # Test du Chi2
+    chi2_stat, p_value, dof, expected = chi2_contingency(country_hazard_table)
+    st.write(f"**Chi2 Statistic**: {chi2_stat:.2f}")
+    st.write(f"**P-value**: {p_value:.4f}")
+    st.write(f"**Degrees of Freedom (dof)**: {dof}")
+    st.write("**Expected Frequencies Table**:", pd.DataFrame(expected, index=country_hazard_table.index, columns=country_hazard_table.columns))
+
+    # Analyse du résultat
+    if p_value < 0.05:
+        st.success(
+            "The result is **statistically significant** (P-value < 0.05). This indicates a strong association between notifying countries and hazard groups."
+        )
+        st.write("""
+        **Interpretation**:
+        - Certain countries are more likely to notify specific types of hazards.
+        - Use the visualizations below to identify these patterns.
+        """)
+    else:
+        st.warning(
+            "The result is **not statistically significant** (P-value >= 0.05). This indicates no strong association between notifying countries and hazard groups."
+        )
+
+    ### Heatmap pour Pays Notifiants vs Groupes de Dangers ###
+    st.subheader("Heatmap: Notifying Countries vs Hazard Groups")
+    fig, ax = plt.subplots(figsize=(12, 8))
+    sns.heatmap(country_hazard_table, annot=True, fmt="d", cmap="Blues", ax=ax)
+    st.pyplot(fig)
+
+    ### Associations importantes ###
+    st.subheader("Top Significant Associations between Notifying Countries and Hazard Groups")
+    top_country_associations = (
+        country_hazard_table.stack()
+        .reset_index(name='count')
+        .sort_values(by='count', ascending=False)
+        .head(10)
+    )
+    st.write("Top 10 Associations", top_country_associations)
+
+    # Bar Chart des associations
+    fig_bar_countries = px.bar(
+        top_country_associations,
+        x='notification_from',
+        y='count',
+        color='grouphaz',
+        title="Top Associations between Notifying Countries and Hazard Groups",
+        labels={"notification_from": "Notifying Country", "count": "Count", "grouphaz": "Hazard Group"}
+    )
+    st.plotly_chart(fig_bar_countries)
+
 
 # Run the dashboard
 
