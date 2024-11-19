@@ -53,31 +53,34 @@ def download_and_clean_weekly_data(year, weeks):
             try:
                 # Attempt to read and transform the weekly data
                 df = pd.read_excel(BytesIO(response.content))
-                
+
                 # Rename columns according to the mapping
                 df = df.rename(columns=weekly_column_mapping)
-                
+
                 # Ensure all expected columns are present, filling missing columns with None
                 for col in expected_columns:
                     if col not in df.columns:
                         df[col] = None  # Add missing column with default None values
-                        
+
                 # Select and reorder columns to match the main DataFrame
                 df = df[expected_columns]
-                
+
                 # Apply category mappings
                 df = apply_mappings(df)
-                
+
                 dfs.append(df)
                 st.info(f"Data for week {week} loaded successfully.")
             except Exception as e:
                 st.warning(f"Failed to process data for week {week}: {e}")
         else:
             st.warning(f"Data for week {week} could not be downloaded.")
-    
+
     if dfs:
-        return pd.concat(dfs, ignore_index=True)
+        combined_df = pd.concat(dfs, ignore_index=True)
+        st.write(f"Combined new data shape: {combined_df.shape}")
+        return combined_df
     else:
+        st.warning("No new data was downloaded for the specified weeks.")
         return pd.DataFrame()  # Return an empty DataFrame if no files could be downloaded
 
 # Apply category mappings
